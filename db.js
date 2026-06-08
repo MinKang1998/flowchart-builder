@@ -1,106 +1,100 @@
 'use strict';
 // ════════════════════════════════════════════════════════════════
-//  db.js  –  Project storage (localStorage + optional Firebase)
-//  Projects live under localStorage keys:
-//    fp_projects  →  JSON array of project metadata
-//    fp_data_{id} →  JSON { shapes, connections }
+//  db.js  –  Shared storage via Firebase Firestore
+//  Requires: firebase-config.js + Firebase compat SDK loaded first
 // ════════════════════════════════════════════════════════════════
 
 const DB = (() => {
-  const META_KEY = 'fp_projects';
-  const dataKey  = id => `fp_data_${id}`;
+  if (!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
+  const fs  = firebase.firestore();
+  const col = fs.collection('projects');
 
-  /* ── helpers ─────────────────────────────────────────────── */
-  function readMeta() {
-    try { return JSON.parse(localStorage.getItem(META_KEY) || '[]'); }
-    catch { return []; }
-  }
-  function writeMeta(list) {
-    localStorage.setItem(META_KEY, JSON.stringify(list));
-  }
-
-  /* ── CRUD ─────────────────────────────────────────────────── */
-  function listProjects() {
-    return readMeta().sort((a,b) => b.updatedAt.localeCompare(a.updatedAt));
+  // ── Password hashing (SHA-256 via WebCrypto) ──────────────────
+  async function hashPw(pw) {
+    if (!pw) return '';
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(pw));
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
   }
 
-  function getProject(id) {
-    return readMeta().find(p => p.id === id) || null;
+  // ── Session-level auth cache ──────────────────────────────────
+  function isAuthed(id)  { return sessionStorage.getItem('auth_' + id) === '1'; }
+  function setAuthed(id) { sessionStorage.setItem('auth_' + id, '1'); }
+
+  // ── CRUD ──────────────────────────────────────────────────────
+  async function listProjects() {
+    const snap = await col.orderBy('updatedAt', 'desc').get();
+    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
   }
 
-  function createProject({ name, description = '', owner = '' }) {
-    const id  = self.crypto.randomUUID();
-    const now = new Date().toISOString();
-    const project = { id, name, description, owner, createdAt: now, updatedAt: now, shapeCount: 0 };
-    const list = readMeta();
-    list.unshift(project);
-    writeMeta(list);
-    localStorage.setItem(dataKey(id), JSON.stringify({ shapes: [], connections: [] }));
-    return project;
+  async function getProject(id) {
+    const doc = await col.doc(id).get();
+    if (!doc.exists) return null;
+    return { id: doc.id, ...doc.data() };
   }
 
-  function updateMeta(id, patch) {
-    const list = readMeta();
-    const i = list.findIndex(p => p.id === id);
-    if (i >= 0) {
-      list[i] = { ...list[i], ...patch, updatedAt: new Date().toISOString() };
-      writeMeta(list);
-      return list[i];
-    }
-    return null;
+  async function createProject({ name, description = '', owner = '', password = '' }) {
+    const id          = crypto.randomUUID();
+    const passwordHash = await hashPw(password);
+    const now         = new Date().toISOString();
+    const data = {
+      name, description, owner, passwordHash,
+      createdAt: now, updatedAt: now,
+      shapeCount: 0, shapes: [], connections: []
+    };
+    await col.doc(id).set(data);
+    setAuthed(id); // creator gets edit rights for this session
+    return { id, ...data };
   }
 
-  function deleteProject(id) {
-    writeMeta(readMeta().filter(p => p.id !== id));
-    localStorage.removeItem(dataKey(id));
+  async function saveCanvas(id, { shapes, connections }) {
+    await col.doc(id).update({
+      shapes, connections,
+      shapeCount: shapes.length,
+      updatedAt: new Date().toISOString()
+    });
   }
 
-  /* ── Canvas data ─────────────────────────────────────────── */
-  function loadCanvas(id) {
-    try { return JSON.parse(localStorage.getItem(dataKey(id)) || '{"shapes":[],"connections":[]}'); }
-    catch { return { shapes: [], connections: [] }; }
+  async function loadCanvas(id) {
+    const doc = await col.doc(id).get();
+    if (!doc.exists) return { shapes: [], connections: [] };
+    const d = doc.data();
+    return { shapes: d.shapes || [], connections: d.connections || [] };
   }
 
-  function saveCanvas(id, { shapes, connections }) {
-    localStorage.setItem(dataKey(id), JSON.stringify({ shapes, connections }));
-    updateMeta(id, { shapeCount: shapes.length });
+  async function deleteProject(id) {
+    await col.doc(id).delete();
   }
 
-  /* ── Import / Export (URL-share) ─────────────────────────── */
-  function exportToString(id) {
-    const meta = getProject(id);
-    const data = loadCanvas(id);
-    return btoa(unescape(encodeURIComponent(JSON.stringify({ meta, data }))));
+  // Returns true if password matches (or project has no password)
+  async function verifyPassword(id, pw) {
+    const p = await getProject(id);
+    if (!p) return false;
+    if (!p.passwordHash) { setAuthed(id); return true; } // no password = open
+    const hash = await hashPw(pw);
+    const ok   = hash === p.passwordHash;
+    if (ok) setAuthed(id);
+    return ok;
   }
 
-  function importFromString(encoded) {
-    try {
-      const { meta, data } = JSON.parse(decodeURIComponent(escape(atob(encoded))));
-      if (!meta || !data) throw new Error('invalid');
-      const id  = self.crypto.randomUUID();
-      const now = new Date().toISOString();
-      const project = { ...meta, id, createdAt: now, updatedAt: now };
-      const list = readMeta();
-      // avoid duplicate names
-      if (list.some(p => p.id === meta.id)) project.name += ' (가져온 사본)';
-      list.unshift(project);
-      writeMeta(list);
-      localStorage.setItem(dataKey(id), JSON.stringify(data));
-      return project;
-    } catch (e) {
-      console.error('importFromString failed:', e);
-      return null;
-    }
-  }
-
-  /* ── Stats helper (for dashboard cards) ─────────────────── */
-  function getStats(id) {
-    const { shapes } = loadCanvas(id);
-    const human = shapes.filter(s => s.subject === 'human').length;
-    const ai    = shapes.filter(s => s.subject === 'ai').length;
+  function getStats(project) {
+    const shapes = project.shapes || [];
+    const human  = shapes.filter(s => s.subject === 'human').length;
+    const ai     = shapes.filter(s => s.subject === 'ai').length;
     return { total: shapes.length, human, ai, unassigned: shapes.length - human - ai };
   }
 
-  return { listProjects, getProject, createProject, updateMeta, deleteProject,
-           loadCanvas, saveCanvas, exportToString, importFromString, getStats };
+  // Real-time listener for project list; returns unsubscribe function
+  function subscribeProjects(callback) {
+    return col.orderBy('updatedAt', 'desc').onSnapshot(snap => {
+      callback(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+  }
+
+  return {
+    listProjects, getProject, createProject,
+    saveCanvas, loadCanvas, deleteProject,
+    verifyPassword, getStats,
+    isAuthed, setAuthed,
+    subscribeProjects
+  };
 })();

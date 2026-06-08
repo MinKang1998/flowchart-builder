@@ -16,11 +16,6 @@
     <span class="text-slate-600 text-xs hidden sm:block">| 업무 프로세스 분석 플랫폼</span>
   </div>
   <div class="flex items-center gap-2">
-    <button id="btn-import"
-      class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition-colors">
-      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
-      URL로 가져오기
-    </button>
     <button id="btn-new"
       class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold transition-colors">
       <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
@@ -29,13 +24,13 @@
   </div>
 </nav>
 
-<!-- ── Hero banner (shown when no projects) ─────────────────── -->
+<!-- ── Empty state ───────────────────────────────────────────── -->
 <div id="empty-state" class="hidden flex-col items-center justify-center py-28 px-6 text-center">
   <div class="w-16 h-16 rounded-2xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center mb-4">
     <svg class="w-8 h-8 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 0v10m0-10a2 2 0 012 2h2a2 2 0 012-2V7"/></svg>
   </div>
   <h2 class="text-xl font-bold text-slate-200 mb-2">아직 프로젝트가 없습니다</h2>
-  <p class="text-slate-500 text-sm mb-6 max-w-sm">새 프로젝트를 만들거나, 공유받은 URL로 프로세스도를 가져오세요.</p>
+  <p class="text-slate-500 text-sm mb-6 max-w-sm">새 프로젝트를 만들어 팀과 프로세스를 공유하세요.</p>
   <button onclick="document.getElementById('btn-new').click()"
     class="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 rounded-xl text-sm font-semibold text-white transition-colors">
     첫 프로젝트 만들기
@@ -80,6 +75,12 @@
         <input id="inp-owner" type="text" placeholder="예) 김민준"
           class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-500 outline-none focus:border-blue-500 transition-colors"/>
       </div>
+      <div>
+        <label class="block text-xs font-semibold text-slate-400 mb-1.5">수정 비밀번호 <span class="text-red-400">*</span></label>
+        <input id="inp-password" type="password" placeholder="수정 권한 비밀번호 설정"
+          class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-500 outline-none focus:border-blue-500 transition-colors"/>
+        <p class="text-[11px] text-slate-500 mt-1">비밀번호를 알아야 내용을 수정할 수 있습니다. 열람은 누구나 가능합니다.</p>
+      </div>
     </div>
     <div class="px-6 pb-6 flex gap-2 justify-end">
       <button id="btn-cancel-new"
@@ -90,38 +91,48 @@
   </div>
 </div>
 
-<!-- ── Import Modal ───────────────────────────────────────────── -->
-<div id="modal-import" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[300] hidden items-center justify-center p-4">
-  <div class="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-lg">
+<!-- ── Password Modal (for 수정 access) ───────────────────────── -->
+<div id="modal-pw" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[400] hidden items-center justify-center p-4">
+  <div class="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-sm">
     <div class="p-6 border-b border-slate-800">
-      <h2 class="text-base font-bold text-slate-100">URL로 프로젝트 가져오기</h2>
-      <p class="text-xs text-slate-500 mt-1">공유받은 URL을 붙여넣으면 프로젝트를 가져올 수 있습니다.</p>
+      <h2 class="text-base font-bold text-slate-100">수정 비밀번호 입력</h2>
+      <p id="modal-pw-name" class="text-xs text-slate-500 mt-1"></p>
     </div>
     <div class="p-6">
-      <textarea id="inp-import-url" rows="4" placeholder="공유받은 URL 또는 내보내기 코드를 붙여넣으세요..."
-        class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-300 placeholder-slate-500 outline-none focus:border-blue-500 resize-none font-mono transition-colors"></textarea>
-      <p id="import-error" class="text-red-400 text-xs mt-2 hidden">올바른 공유 코드가 아닙니다. 다시 확인해주세요.</p>
+      <input id="inp-pw" type="password" placeholder="비밀번호"
+        class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-500 outline-none focus:border-blue-500 transition-colors"/>
+      <p id="pw-error" class="text-red-400 text-xs mt-2 hidden">비밀번호가 올바르지 않습니다.</p>
     </div>
     <div class="px-6 pb-6 flex gap-2 justify-end">
-      <button id="btn-cancel-import"
+      <button id="btn-cancel-pw"
         class="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-medium transition-colors">취소</button>
-      <button id="btn-do-import"
-        class="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold transition-colors">가져오기</button>
+      <button id="btn-confirm-pw"
+        class="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold transition-colors">확인</button>
     </div>
   </div>
 </div>
 
+<!-- ── Firebase SDK ───────────────────────────────────────────── -->
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+<script src="firebase-config.js"></script>
 <script src="db.js"></script>
 <script>
-// ── Render helpers ─────────────────────────────────────────────
+'use strict';
+let allProjects = [];
+let searchFilter = '';
+
+// ── Helpers ────────────────────────────────────────────────────
 function timeAgo(iso) {
   const d = (Date.now() - new Date(iso).getTime()) / 1000;
-  if (d < 60)   return '방금 전';
-  if (d < 3600) return Math.floor(d/60) + '분 전';
+  if (d < 60)    return '방금 전';
+  if (d < 3600)  return Math.floor(d/60) + '분 전';
   if (d < 86400) return Math.floor(d/3600) + '시간 전';
   return Math.floor(d/86400) + '일 전';
 }
-
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
 function subjectBar(stats) {
   const t = stats.total || 1;
   const hp = Math.round(stats.human / t * 100);
@@ -129,48 +140,39 @@ function subjectBar(stats) {
   const up = 100 - hp - ap;
   return `
     <div class="flex h-1.5 rounded-full overflow-hidden gap-px mt-2">
-      ${hp ? `<div class="bg-blue-500 transition-all" style="width:${hp}%" title="사람 ${stats.human}개"></div>` : ''}
-      ${ap ? `<div class="bg-purple-500 transition-all" style="width:${ap}%" title="AI ${stats.ai}개"></div>` : ''}
-      ${up ? `<div class="bg-slate-700 transition-all" style="width:${up}%"></div>` : ''}
+      ${hp ? `<div class="bg-blue-500" style="width:${hp}%"></div>` : ''}
+      ${ap ? `<div class="bg-purple-500" style="width:${ap}%"></div>` : ''}
+      ${up ? `<div class="bg-slate-700" style="width:${up}%"></div>` : ''}
     </div>`;
 }
 
 function renderCard(p) {
-  const stats  = DB.getStats(p.id);
-  const colors = ['from-blue-600/20', 'from-purple-600/20', 'from-emerald-600/20', 'from-amber-600/20', 'from-rose-600/20'];
+  const stats  = DB.getStats(p);
+  const colors = ['from-blue-600/20','from-purple-600/20','from-emerald-600/20','from-amber-600/20','from-rose-600/20'];
   const color  = colors[parseInt(p.id.slice(-1), 16) % colors.length];
+  const lock   = p.passwordHash ? '<svg class="w-3 h-3 text-slate-500 inline-block" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>' : '';
   return `
-    <div class="group relative bg-slate-900 border border-slate-800 rounded-xl p-5 hover:border-slate-600 cursor-pointer transition-all hover:shadow-xl hover:shadow-black/30 hover:-translate-y-0.5"
-      onclick="openProject('${p.id}')">
+    <div class="group relative bg-slate-900 border border-slate-800 rounded-xl p-5 hover:border-slate-600 transition-all hover:shadow-xl hover:shadow-black/30 hover:-translate-y-0.5">
       <div class="absolute inset-0 rounded-xl bg-gradient-to-br ${color} to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"></div>
       <div class="relative">
         <div class="flex items-start justify-between mb-3">
-          <div class="w-9 h-9 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-lg">
-            📋
-          </div>
-          <div class="flex gap-1">
-            <button onclick="event.stopPropagation(); shareProject('${p.id}')"
-              class="opacity-0 group-hover:opacity-100 w-7 h-7 rounded-lg bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-slate-400 hover:text-white transition-all"
-              title="공유 링크 복사">
-              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/></svg>
-            </button>
-            <button onclick="event.stopPropagation(); deleteProject('${p.id}')"
-              class="opacity-0 group-hover:opacity-100 w-7 h-7 rounded-lg bg-slate-800 hover:bg-red-600 flex items-center justify-center text-slate-400 hover:text-white transition-all"
-              title="삭제">
-              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
-            </button>
-          </div>
+          <div class="w-9 h-9 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-lg">📋</div>
+          <button onclick="event.stopPropagation(); deleteProject('${p.id}')"
+            class="opacity-0 group-hover:opacity-100 w-7 h-7 rounded-lg bg-slate-800 hover:bg-red-600 flex items-center justify-center text-slate-400 hover:text-white transition-all"
+            title="삭제">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+          </button>
         </div>
-        <h3 class="font-semibold text-sm text-slate-100 truncate mb-1">${escHtml(p.name)}</h3>
+        <h3 class="font-semibold text-sm text-slate-100 truncate mb-1">${escHtml(p.name)} ${lock}</h3>
         ${p.description ? `<p class="text-xs text-slate-500 truncate mb-2">${escHtml(p.description)}</p>` : ''}
-        <div class="flex items-center gap-2 text-[11px] text-slate-500">
-          ${p.owner ? `<span class="flex items-center gap-1"><span class="text-slate-600">👤</span>${escHtml(p.owner)}</span><span class="text-slate-700">·</span>` : ''}
+        <div class="flex items-center gap-2 text-[11px] text-slate-500 mb-3">
+          ${p.owner ? `<span>👤 ${escHtml(p.owner)}</span><span class="text-slate-700">·</span>` : ''}
           <span>${timeAgo(p.updatedAt)}</span>
           <span class="text-slate-700">·</span>
           <span>${stats.total}개 단계</span>
         </div>
         ${stats.total > 0 ? `
-          <div class="mt-3">
+          <div class="mb-3">
             ${subjectBar(stats)}
             <div class="flex items-center gap-3 mt-1.5 text-[10px] text-slate-500">
               <span class="flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-blue-500 inline-block"></span>${stats.human} 사람</span>
@@ -178,64 +180,150 @@ function renderCard(p) {
               ${stats.unassigned ? `<span class="flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-slate-600 inline-block"></span>${stats.unassigned} 미지정</span>` : ''}
             </div>
           </div>` : ''}
+        <div class="flex gap-2">
+          <button onclick="viewProject('${p.id}')"
+            class="flex-1 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition-colors flex items-center justify-center gap-1">
+            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+            열람
+          </button>
+          <button onclick="editProject('${p.id}', '${escHtml(p.name)}')"
+            class="flex-1 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold transition-colors flex items-center justify-center gap-1">
+            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+            수정
+          </button>
+        </div>
       </div>
     </div>`;
 }
 
-function escHtml(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+// ── Dashboard render ───────────────────────────────────────────
+function renderDashboard(projects) {
+  allProjects = projects;
+  applyFilter();
 }
 
-// ── Main render ────────────────────────────────────────────────
-function renderDashboard(filter = '') {
-  const all = DB.listProjects().filter(p =>
-    !filter || p.name.toLowerCase().includes(filter.toLowerCase()) ||
-    (p.owner || '').toLowerCase().includes(filter.toLowerCase())
-  );
-  const grid    = document.getElementById('project-grid');
-  const empty   = document.getElementById('empty-state');
-  const sub     = document.getElementById('project-subtitle');
-  const allList = DB.listProjects();
+function applyFilter() {
+  const f    = searchFilter.toLowerCase();
+  const list = f ? allProjects.filter(p =>
+    p.name.toLowerCase().includes(f) || (p.owner||'').toLowerCase().includes(f)
+  ) : allProjects;
 
-  sub.textContent = `총 ${allList.length}개 프로젝트`;
-  if (!allList.length) {
+  const grid  = document.getElementById('project-grid');
+  const empty = document.getElementById('empty-state');
+  const sub   = document.getElementById('project-subtitle');
+
+  sub.textContent = `총 ${allProjects.length}개 프로젝트`;
+
+  if (!allProjects.length) {
     grid.innerHTML = '';
-    empty.classList.remove('hidden');
-    empty.classList.add('flex');
+    empty.classList.remove('hidden'); empty.classList.add('flex');
     return;
   }
-  empty.classList.add('hidden');
-  empty.classList.remove('flex');
-  if (!all.length) {
-    grid.innerHTML = `<div class="col-span-full py-12 text-center text-slate-500 text-sm">"${escHtml(filter)}" 검색 결과가 없습니다.</div>`;
+  empty.classList.add('hidden'); empty.classList.remove('flex');
+
+  if (!list.length) {
+    grid.innerHTML = `<div class="col-span-full py-12 text-center text-slate-500 text-sm">"${escHtml(f)}" 검색 결과가 없습니다.</div>`;
     return;
   }
-  grid.innerHTML = all.map(renderCard).join('');
+  grid.innerHTML = list.map(renderCard).join('');
 }
+
+document.getElementById('search').addEventListener('input', e => {
+  searchFilter = e.target.value;
+  applyFilter();
+});
 
 // ── Actions ────────────────────────────────────────────────────
-function openProject(id) {
-  location.href = `editor.html?id=${id}`;
+function viewProject(id) {
+  location.href = `editor.html?id=${id}&mode=view`;
 }
 
-function shareProject(id) {
-  const encoded = DB.exportToString(id);
-  const url = location.origin + location.pathname + `?import=${encoded}`;
-  navigator.clipboard.writeText(url).then(() => {
-    showToast('공유 링크가 클립보드에 복사되었습니다 ✓');
-  }).catch(() => {
-    prompt('아래 링크를 복사하세요:', url);
-  });
+async function editProject(id, name) {
+  // If already authed in this session, go directly
+  if (DB.isAuthed(id)) { location.href = `editor.html?id=${id}&mode=edit`; return; }
+  // Check if project has no password
+  const p = await DB.getProject(id);
+  if (!p) return;
+  if (!p.passwordHash) { DB.setAuthed(id); location.href = `editor.html?id=${id}&mode=edit`; return; }
+  // Show password modal
+  showPwModal(id, name);
 }
 
-function deleteProject(id) {
-  const p = DB.getProject(id);
+async function deleteProject(id) {
+  const p = allProjects.find(x => x.id === id);
   if (!p) return;
   if (!confirm(`"${p.name}" 프로젝트를 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`)) return;
-  DB.deleteProject(id);
-  renderDashboard(document.getElementById('search').value);
+  await DB.deleteProject(id);
 }
 
+// ── Password modal ─────────────────────────────────────────────
+let pwTargetId = null;
+const modalPw = document.getElementById('modal-pw');
+
+function showPwModal(id, name) {
+  pwTargetId = id;
+  document.getElementById('modal-pw-name').textContent = `"${name}" 프로젝트 수정 권한이 필요합니다.`;
+  document.getElementById('inp-pw').value = '';
+  document.getElementById('pw-error').classList.add('hidden');
+  modalPw.classList.remove('hidden'); modalPw.classList.add('flex');
+  setTimeout(() => document.getElementById('inp-pw').focus(), 50);
+}
+function hidePwModal() {
+  modalPw.classList.add('hidden'); modalPw.classList.remove('flex');
+  pwTargetId = null;
+}
+
+document.getElementById('btn-cancel-pw').addEventListener('click', hidePwModal);
+document.getElementById('btn-confirm-pw').addEventListener('click', async () => {
+  const pw = document.getElementById('inp-pw').value;
+  const ok = await DB.verifyPassword(pwTargetId, pw);
+  if (ok) {
+    hidePwModal();
+    location.href = `editor.html?id=${pwTargetId}&mode=edit`;
+  } else {
+    document.getElementById('pw-error').classList.remove('hidden');
+    document.getElementById('inp-pw').focus();
+  }
+});
+document.getElementById('inp-pw').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('btn-confirm-pw').click();
+});
+
+// ── New Project Modal ──────────────────────────────────────────
+const modalNew = document.getElementById('modal-new');
+document.getElementById('btn-new').addEventListener('click', () => {
+  ['inp-name','inp-desc','inp-owner','inp-password'].forEach(id => document.getElementById(id).value = '');
+  modalNew.classList.remove('hidden'); modalNew.classList.add('flex');
+  setTimeout(() => document.getElementById('inp-name').focus(), 50);
+});
+document.getElementById('btn-cancel-new').addEventListener('click', () => {
+  modalNew.classList.add('hidden'); modalNew.classList.remove('flex');
+});
+document.getElementById('btn-create').addEventListener('click', async () => {
+  const name = document.getElementById('inp-name').value.trim();
+  if (!name) { document.getElementById('inp-name').focus(); return; }
+  const password = document.getElementById('inp-password').value;
+  if (!password) { document.getElementById('inp-password').focus(); return; }
+  const btn = document.getElementById('btn-create');
+  btn.disabled = true; btn.textContent = '생성 중...';
+  try {
+    const p = await DB.createProject({
+      name,
+      description: document.getElementById('inp-desc').value.trim(),
+      owner:       document.getElementById('inp-owner').value.trim(),
+      password
+    });
+    modalNew.classList.add('hidden'); modalNew.classList.remove('flex');
+    location.href = `editor.html?id=${p.id}&new=1&mode=edit`;
+  } finally {
+    btn.disabled = false; btn.textContent = '프로젝트 생성';
+  }
+});
+document.getElementById('inp-name').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('inp-password').focus();
+});
+
+// ── Toast ─────────────────────────────────────────────────────
 function showToast(msg) {
   const t = document.createElement('div');
   t.className = 'fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-800 border border-slate-700 text-slate-200 text-xs px-4 py-2.5 rounded-full shadow-lg z-[999] transition-opacity';
@@ -244,84 +332,8 @@ function showToast(msg) {
   setTimeout(() => { t.style.opacity = '0'; setTimeout(() => t.remove(), 300); }, 2500);
 }
 
-// ── Modal: New project ─────────────────────────────────────────
-const modalNew = document.getElementById('modal-new');
-document.getElementById('btn-new').addEventListener('click', () => {
-  document.getElementById('inp-name').value = '';
-  document.getElementById('inp-desc').value = '';
-  document.getElementById('inp-owner').value = '';
-  modalNew.classList.remove('hidden');
-  modalNew.classList.add('flex');
-  setTimeout(() => document.getElementById('inp-name').focus(), 50);
-});
-document.getElementById('btn-cancel-new').addEventListener('click', () => {
-  modalNew.classList.add('hidden'); modalNew.classList.remove('flex');
-});
-document.getElementById('btn-create').addEventListener('click', () => {
-  const name = document.getElementById('inp-name').value.trim();
-  if (!name) { document.getElementById('inp-name').focus(); return; }
-  const p = DB.createProject({
-    name,
-    description: document.getElementById('inp-desc').value.trim(),
-    owner: document.getElementById('inp-owner').value.trim()
-  });
-  modalNew.classList.add('hidden'); modalNew.classList.remove('flex');
-  location.href = `editor.html?id=${p.id}&new=1`;
-});
-document.getElementById('inp-name').addEventListener('keydown', e => {
-  if (e.key === 'Enter') document.getElementById('btn-create').click();
-});
-
-// ── Modal: Import ──────────────────────────────────────────────
-const modalImport = document.getElementById('modal-import');
-document.getElementById('btn-import').addEventListener('click', () => {
-  document.getElementById('inp-import-url').value = '';
-  document.getElementById('import-error').classList.add('hidden');
-  modalImport.classList.remove('hidden');
-  modalImport.classList.add('flex');
-  setTimeout(() => document.getElementById('inp-import-url').focus(), 50);
-});
-document.getElementById('btn-cancel-import').addEventListener('click', () => {
-  modalImport.classList.add('hidden'); modalImport.classList.remove('flex');
-});
-document.getElementById('btn-do-import').addEventListener('click', () => {
-  let raw = document.getElementById('inp-import-url').value.trim();
-  // Extract encoded part from full URL if pasted
-  try { const u = new URL(raw); raw = u.searchParams.get('import') || raw; } catch {}
-  const p = DB.importFromString(raw);
-  if (!p) {
-    document.getElementById('import-error').classList.remove('hidden');
-    return;
-  }
-  modalImport.classList.add('hidden'); modalImport.classList.remove('flex');
-  showToast(`"${p.name}" 프로젝트를 가져왔습니다 ✓`);
-  renderDashboard();
-});
-
-// ── Close modals on backdrop click ────────────────────────────
-[modalNew, modalImport].forEach(m => {
-  m.addEventListener('click', e => { if (e.target === m) { m.classList.add('hidden'); m.classList.remove('flex'); } });
-});
-
-// ── Search ─────────────────────────────────────────────────────
-document.getElementById('search').addEventListener('input', e => renderDashboard(e.target.value));
-
-// ── Auto-import from URL (?import=...) ─────────────────────────
-(function () {
-  const params = new URLSearchParams(location.search);
-  const enc = params.get('import');
-  if (enc) {
-    history.replaceState({}, '', location.pathname);
-    const p = DB.importFromString(enc);
-    if (p) {
-      renderDashboard();
-      setTimeout(() => showToast(`"${p.name}" 프로젝트를 자동으로 가져왔습니다 ✓`), 300);
-    }
-  }
-})();
-
-// ── Boot ───────────────────────────────────────────────────────
-renderDashboard();
+// ── Boot: real-time subscription ──────────────────────────────
+DB.subscribeProjects(renderDashboard);
 </script>
 </body>
 </html>

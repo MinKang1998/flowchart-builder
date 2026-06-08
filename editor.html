@@ -163,6 +163,11 @@
       <div id="pan-hint" class="absolute bottom-3 left-1/2 -translate-x-1/2 bg-slate-800/80 backdrop-blur text-white text-[11px] px-3 py-1.5 rounded-full pointer-events-none opacity-0 transition-opacity">
         빈 공간 드래그 = 이동 · 휠 = 확대/축소 · Space+드래그 = 올가미 선택
       </div>
+
+      <!-- View-mode banner -->
+      <div id="view-banner" class="hidden absolute top-3 left-1/2 -translate-x-1/2 bg-amber-500/90 backdrop-blur text-white text-[11px] font-semibold px-4 py-1.5 rounded-full shadow-lg pointer-events-none z-10">
+        👁 열람 모드 — 변경 사항은 저장되지 않습니다
+      </div>
     </div>
 
     <!-- Divider -->
@@ -227,7 +232,10 @@
   </div>
 </div>
 
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="firebase-config.js"></script>
 <script src="db.js"></script>
 <script src="editor.js"></script>
 </body>

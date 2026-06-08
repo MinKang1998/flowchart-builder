@@ -28,6 +28,7 @@ let ctxTargetId = null;
 let nextId      = 1;
 let projectId   = null;
 let saveTimer   = null;
+let readOnly    = false;  // true when mode=view
 
 // ── Clipboard (copy/paste) ─────────────────────────────────────
 let clipboard   = null; // { shapes, connections }
@@ -289,7 +290,7 @@ svg.addEventListener('dragover', e => { e.preventDefault(); svg.classList.add('d
 svg.addEventListener('dragleave', () => svg.classList.remove('drag-over'));
 svg.addEventListener('drop', e => {
   e.preventDefault(); svg.classList.remove('drag-over');
-  if (!panelDragType) return;
+  if (!panelDragType || readOnly) return;
   const {x:sx,y:sy} = svgOff(e.clientX, e.clientY);
   const c = toCanvas(sx, sy);
   const d = DEFAULTS[panelDragType];
@@ -379,6 +380,7 @@ function syncShapeDOM(shape) {
 //  Shape events
 // ════════════════════════════════════════════════════════════════
 function wireShapeEvents(g, shape) {
+  if (readOnly) return;
   let drag=false, didMove=false;
 
   g.addEventListener('mousedown', e => {
@@ -523,6 +525,7 @@ textEditor.addEventListener('blur', ()=>closeTextEditor());
 //  Connect points
 // ════════════════════════════════════════════════════════════════
 function wireCp(cp, shape, ptIdx) {
+  if (readOnly) return;
   cp.addEventListener('mousedown', e => {
     e.stopPropagation(); e.preventDefault();
     const [fx,fy]=cpCoord(shape,ptIdx);
@@ -774,6 +777,7 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape') { closeCtx(); if (inInput) closeTextEditor(true); else clearSel(); return; }
 
   if (inInput) return; // block all other shortcuts while typing
+  if (readOnly)  return; // view mode — no edits
 
   // Delete / Backspace
   if ((e.key==='Delete'||e.key==='Backspace') && selectedIds.size) {
@@ -858,14 +862,19 @@ function setSaveStatus(s) {
   if (s==='saving'){ dot.className='w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse'; txt.textContent='저장 중...'; }
   else              { dot.className='w-1.5 h-1.5 rounded-full bg-emerald-400'; txt.textContent='저장됨'; }
 }
-function scheduleSave(){ setSaveStatus('saving'); clearTimeout(saveTimer); saveTimer=setTimeout(doSave,800); }
-function doSave() {
-  if (!projectId) return;
-  DB.saveCanvas(projectId,{
-    shapes:shapes.map(s=>({id:s.id,type:s.type,x:Math.round(s.x),y:Math.round(s.y),w:s.w,h:s.h,text:s.text,subject:s.subject})),
-    connections:connections.map(c=>({id:c.id,fromId:c.fromId,toId:c.toId,fromPtIdx:c.fromPtIdx,toPtIdx:c.toPtIdx,label:c.label}))
-  });
-  setSaveStatus('saved');
+function scheduleSave() {
+  if (readOnly) return;
+  setSaveStatus('saving'); clearTimeout(saveTimer); saveTimer = setTimeout(doSave, 800);
+}
+async function doSave() {
+  if (!projectId || readOnly) return;
+  try {
+    await DB.saveCanvas(projectId, {
+      shapes:      shapes.map(s=>({id:s.id,type:s.type,x:Math.round(s.x),y:Math.round(s.y),w:s.w,h:s.h,text:s.text,subject:s.subject})),
+      connections: connections.map(c=>({id:c.id,fromId:c.fromId,toId:c.toId,fromPtIdx:c.fromPtIdx,toPtIdx:c.toPtIdx,label:c.label}))
+    });
+    setSaveStatus('saved');
+  } catch(e) { console.error('save failed', e); setSaveStatus('saved'); }
 }
 
 function loadCanvas(data) {
@@ -879,17 +888,17 @@ function loadCanvas(data) {
 // ════════════════════════════════════════════════════════════════
 //  Share / Export
 // ════════════════════════════════════════════════════════════════
-document.getElementById('btn-share').addEventListener('click',()=>{
-  if(!projectId) return; doSave();
-  const base=location.origin+location.pathname.replace('editor.html','')+'index.html';
-  const url=base+`?import=${DB.exportToString(projectId)}`;
-  navigator.clipboard.writeText(url).then(()=>showToast('공유 링크 복사됨 ✓')).catch(()=>prompt('공유 링크:',url));
+document.getElementById('btn-share').addEventListener('click', async () => {
+  if (!projectId) return;
+  await doSave();
+  const url = location.origin + location.pathname.replace('editor.html','') + `editor.html?id=${projectId}&mode=view`;
+  navigator.clipboard.writeText(url).then(()=>showToast('열람 링크 복사됨 ✓ (누구나 열람 가능)')).catch(()=>prompt('열람 링크:',url));
 });
 
-document.getElementById('btn-export-json').addEventListener('click',()=>{
-  doSave();
-  const meta=DB.getProject(projectId)||{};
-  const blob=new Blob([JSON.stringify({project:meta,shapes:shapes.map(s=>({id:s.id,type:s.type,x:Math.round(s.x),y:Math.round(s.y),w:s.w,h:s.h,text:s.text,subject:s.subject})),connections:connections.map(c=>({id:c.id,fromId:c.fromId,toId:c.toId,fromPtIdx:c.fromPtIdx,toPtIdx:c.toPtIdx,label:c.label})),analysis:shapes.map((s,i)=>({seq:i+1,name:s.text||'(미입력)',type:typeLabel(s.type),subject:s.subject==='human'?'사람':s.subject==='ai'?'AI':'미지정',followups:connections.filter(c=>c.fromId===s.id).map(c=>({target:shapes.find(sh=>sh.id===c.toId)?.text||'?',label:c.label}))}))},null,2)],{type:'application/json'});
+document.getElementById('btn-export-json').addEventListener('click', async () => {
+  await doSave();
+  const meta = await DB.getProject(projectId) || {};
+  const blob = new Blob([JSON.stringify({project:meta,shapes:shapes.map(s=>({id:s.id,type:s.type,x:Math.round(s.x),y:Math.round(s.y),w:s.w,h:s.h,text:s.text,subject:s.subject})),connections:connections.map(c=>({id:c.id,fromId:c.fromId,toId:c.toId,fromPtIdx:c.fromPtIdx,toPtIdx:c.toPtIdx,label:c.label})),analysis:shapes.map((s,i)=>({seq:i+1,name:s.text||'(미입력)',type:typeLabel(s.type),subject:s.subject==='human'?'사람':s.subject==='ai'?'AI':'미지정',followups:connections.filter(c=>c.fromId===s.id).map(c=>({target:shapes.find(sh=>sh.id===c.toId)?.text||'?',label:c.label}))}))},null,2)],{type:'application/json'});
   const a=Object.assign(document.createElement('a'),{href:URL.createObjectURL(blob),download:(meta.name||'flowchart')+'.json'}); a.click(); URL.revokeObjectURL(a.href);
 });
 
@@ -908,23 +917,52 @@ document.getElementById('btn-export-pdf').addEventListener('click',()=>{
   clone.setAttribute('viewBox', `${minX} ${minY} ${W} ${H}`);
   clone.querySelector('#viewport')?.removeAttribute('transform');
   clone.querySelector('#tempLayer')?.remove();
-  clone.querySelectorAll('.connect-point').forEach(el=>el.remove());
+  clone.querySelectorAll('.connect-point').forEach(el => el.remove());
+  clone.querySelector('#grid-bg')?.remove(); // remove dot grid
 
-  const blob = new Blob([new XMLSerializer().serializeToString(clone)],{type:'image/svg+xml;charset=utf-8'});
-  const url = URL.createObjectURL(blob);
+  // Embed CSS so colors render when SVG is loaded as <img> (external stylesheet not applied)
+  const styleEl = document.createElementNS('http://www.w3.org/2000/svg','style');
+  styleEl.textContent = `
+    .shape-body{stroke-width:2;}
+    .shape-rect{fill:#dbeafe;stroke:#3b82f6;}
+    .shape-diamond{fill:#fef3c7;stroke:#f59e0b;}
+    .shape-oval{fill:#dcfce7;stroke:#22c55e;}
+    .subject-human .shape-body{stroke:#1d4ed8!important;stroke-width:2.5!important;}
+    .subject-human .shape-rect,.subject-human .shape-diamond,.subject-human .shape-oval{fill:#bfdbfe!important;}
+    .subject-ai .shape-body{stroke:#7c3aed!important;stroke-width:2.5!important;}
+    .subject-ai .shape-rect,.subject-ai .shape-diamond,.subject-ai .shape-oval{fill:#ede9fe!important;}
+    .connection{fill:none;stroke:#64748b;stroke-width:2;marker-end:url(#arrowhead);}
+    .yn-line{stroke:#7c3aed;marker-end:url(#arrowhead-yn);}
+    .conn-label-bg{fill:#fff;stroke:#d1d5db;stroke-width:1;}
+    .conn-label-bg.yn-yes{fill:#d1fae5;stroke:#6ee7b7;}
+    .conn-label-bg.yn-no{fill:#fee2e2;stroke:#fca5a5;}
+    .conn-label-text{font-size:11px;font-weight:700;text-anchor:middle;dominant-baseline:central;fill:#1e293b;font-family:system-ui,sans-serif;}
+    .conn-label-text.yn-yes{fill:#065f46;}
+    .conn-label-text.yn-no{fill:#991b1b;}
+    .subject-badge{font-size:11px;fill:#1e293b;font-family:system-ui,sans-serif;}
+  `;
+  clone.insertBefore(styleEl, clone.firstChild);
+
+  const svgBlob = new Blob([new XMLSerializer().serializeToString(clone)],{type:'image/svg+xml;charset=utf-8'});
+  const url = URL.createObjectURL(svgBlob);
   const img = new Image();
-  img.onload = () => {
+  img.onload = async () => {
     // Render at 2× for crisp output
     const cvs = Object.assign(document.createElement('canvas'),{width:W*2,height:H*2});
     const ctx = cvs.getContext('2d');
     ctx.scale(2,2); ctx.fillStyle='#f8fafc'; ctx.fillRect(0,0,W,H); ctx.drawImage(img,0,0);
     URL.revokeObjectURL(url);
-    const meta = DB.getProject(projectId)||{};
+    const meta = await DB.getProject(projectId) || {};
     const { jsPDF } = window.jspdf;
-    const pdf = new jsPDF({ orientation: W>H?'l':'p', unit:'px', format:[W,H], hotfixes:['px_scaling'] });
-    pdf.addImage(cvs.toDataURL('image/jpeg',0.95),'JPEG',0,0,W,H);
+    const pdf = new jsPDF({ orientation: W>H?'l':'p', unit:'px', format:[W,H] });
+    const imgData = cvs.toDataURL('image/jpeg', 0.95);
+    // jsPDF px unit: 1px = 0.264583mm; convert dimensions manually
+    const pdfW = pdf.internal.pageSize.getWidth();
+    const pdfH = pdf.internal.pageSize.getHeight();
+    pdf.addImage(imgData, 'JPEG', 0, 0, pdfW, pdfH);
     pdf.save((meta.name||'flowchart')+'.pdf');
   };
+  img.onerror = () => { URL.revokeObjectURL(url); showToast('PDF 생성 실패 — SVG 렌더링 오류'); };
   img.src = url;
 });
 
@@ -953,44 +991,58 @@ function showToast(msg) {
 // ════════════════════════════════════════════════════════════════
 //  Boot
 // ════════════════════════════════════════════════════════════════
-(function boot() {
-  const params=new URLSearchParams(location.search);
-  projectId=params.get('id');
-  const isNew=params.get('new')==='1';
-  if (!projectId) { location.href='index.html'; return; }
-  const meta=DB.getProject(projectId);
-  if (!meta)    { location.href='index.html'; return; }
+(async function boot() {
+  const params  = new URLSearchParams(location.search);
+  projectId     = params.get('id');
+  const isNew   = params.get('new')  === '1';
+  const mode    = params.get('mode') || 'edit'; // 'view' | 'edit'
+  readOnly      = mode === 'view';
 
-  document.title=meta.name+' – FlowChart Builder';
-  document.getElementById('project-name').textContent=meta.name;
+  if (!projectId) { location.href = 'index.html'; return; }
 
-  const data=DB.loadCanvas(projectId);
-  if (isNew||!data.shapes.length) {
-    const s1=createShape('oval',  100,60,'시작','human');
-    const s2=createShape('rect',  100,170,'업무 접수','human');
-    const s3=createShape('diamond',100,290,'승인 필요?','human');
-    const s4=createShape('rect',  290,250,'승인 요청','human');
-    const s5=createShape('rect',  100,430,'처리 진행','ai');
-    const s6=createShape('oval',  100,550,'종료','human');
+  const meta = await DB.getProject(projectId);
+  if (!meta)  { location.href = 'index.html'; return; }
+
+  document.title = meta.name + ' – FlowChart Builder';
+  document.getElementById('project-name').textContent = meta.name;
+
+  // Show view-mode banner and hide edit-only UI
+  if (readOnly) {
+    const banner = document.getElementById('view-banner');
+    if (banner) banner.classList.remove('hidden');
+    document.getElementById('save-status')?.style.setProperty('display','none');
+    document.getElementById('btn-delete')?.style.setProperty('display','none');
+    document.getElementById('btn-share')?.style.setProperty('display','none');
+    document.getElementById('btn-export-json')?.style.setProperty('display','none');
+  }
+
+  const data = await DB.loadCanvas(projectId);
+  if (isNew || !data.shapes.length) {
+    const s1=createShape('oval',    100, 60, '시작',    'human');
+    const s2=createShape('rect',    100,170, '업무 접수','human');
+    const s3=createShape('diamond', 100,290, '승인 필요?','human');
+    const s4=createShape('rect',    290,250, '승인 요청','human');
+    const s5=createShape('rect',    100,430, '처리 진행','ai');
+    const s6=createShape('oval',    100,550, '종료',    'human');
     setTimeout(()=>{
       createConnection(s1,2,s2,0); createConnection(s2,2,s3,0);
       createConnection(s3,1,s4,3); createConnection(s3,2,s5,0);
       createConnection(s4,2,s5,smartTargetCp(s4,2,s5)); createConnection(s5,2,s6,0);
-    },30);
+    }, 30);
   } else {
     loadCanvas(data);
   }
 
   // Hint
-  setTimeout(()=>{
-    const h=document.getElementById('pan-hint');
-    if(h){h.style.opacity='1'; setTimeout(()=>{h.style.transition='opacity 1s';h.style.opacity='0';},3500);}
-  },1000);
+  setTimeout(() => {
+    const h = document.getElementById('pan-hint');
+    if (h) { h.style.opacity='1'; setTimeout(()=>{h.style.transition='opacity 1s';h.style.opacity='0';},3500); }
+  }, 1000);
 
-  // Push initial state for undo
-  setTimeout(()=>{ history=[snapshot()]; histIdx=0; },100);
+  // Push initial undo state
+  setTimeout(() => { history=[snapshot()]; histIdx=0; }, 100);
   applyVP();
 
-  // Save immediately on page leave so debounce timer doesn't get lost
-  window.addEventListener('beforeunload', doSave);
+  // Save immediately on page leave
+  if (!readOnly) window.addEventListener('beforeunload', doSave);
 })();
