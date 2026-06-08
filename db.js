@@ -33,8 +33,16 @@ const DB = (() => {
       text:    s.text    || '',
       subject: s.subject || null
     };
-    if (s.bold)     out.bold     = s.bold;
-    if (s.fontSize) out.fontSize = s.fontSize;
+    if (s.bold)      out.bold      = s.bold;
+    if (s.fontSize)  out.fontSize  = s.fontSize;
+    if (s.textColor) out.textColor = s.textColor;
+    if (s.type === 'highlight') {
+      out.strokeColor = s.strokeColor || '#3b82f6';
+      out.strokeWidth = s.strokeWidth || 2;
+      out.dashType    = s.dashType    || 'dashed';
+      out.glow        = s.glow        || false;
+      if (s.fillColor) out.fillColor  = s.fillColor;
+    }
     return out;
   }
 

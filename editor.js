@@ -10,11 +10,12 @@
 // ════════════════════════════════════════════════════════════════
 
 // ── DOM ───────────────────────────────────────────────────────
-const svg         = document.getElementById('canvas');
-const viewport    = document.getElementById('viewport');
-const shapesLayer = document.getElementById('shapes-layer');
-const connsLayer  = document.getElementById('connections-layer');
-const tempLayer   = document.getElementById('temp-layer');
+const svg             = document.getElementById('canvas');
+const viewport        = document.getElementById('viewport');
+const highlightsLayer = document.getElementById('highlights-layer');
+const shapesLayer     = document.getElementById('shapes-layer');
+const connsLayer      = document.getElementById('connections-layer');
+const tempLayer       = document.getElementById('temp-layer');
 const textEditor  = document.getElementById('text-editor');
 const ctxMenu     = document.getElementById('context-menu');
 const tableBody   = document.getElementById('table-body');
@@ -40,11 +41,18 @@ let histIdx     = -1;
 
 function snapshot() {
   return JSON.stringify({
-    shapes: shapes.map(s => ({
-      id:s.id, type:s.type, x:Math.round(s.x), y:Math.round(s.y),
-      w:s.w, h:s.h, text:s.text, subject:s.subject,
-      bold:s.bold||undefined, fontSize:s.fontSize||undefined
-    })),
+    shapes: shapes.map(s => {
+      const o = {id:s.id,type:s.type,x:Math.round(s.x),y:Math.round(s.y),w:s.w,h:s.h,text:s.text||'',subject:s.subject||null};
+      if (s.bold)      o.bold      = s.bold;
+      if (s.fontSize)  o.fontSize  = s.fontSize;
+      if (s.textColor) o.textColor = s.textColor;
+      if (s.type==='highlight') {
+        o.strokeColor = s.strokeColor||'#3b82f6'; o.strokeWidth = s.strokeWidth||2;
+        o.dashType = s.dashType||'dashed'; o.glow = s.glow||false;
+        if (s.fillColor) o.fillColor = s.fillColor;
+      }
+      return o;
+    }),
     connections: connections.map(c => ({
       id:c.id, fromId:c.fromId, toId:c.toId,
       fromPtIdx:c.fromPtIdx, toPtIdx:c.toPtIdx, label:c.label
@@ -279,7 +287,7 @@ function endLasso() {
 // ════════════════════════════════════════════════════════════════
 //  Shape defaults
 // ════════════════════════════════════════════════════════════════
-const DEFAULTS = { rect:{w:130,h:60}, diamond:{w:130,h:80}, oval:{w:130,h:54}, text:{w:160,h:48} };
+const DEFAULTS = { rect:{w:130,h:60}, diamond:{w:130,h:80}, oval:{w:130,h:54}, text:{w:160,h:48}, highlight:{w:220,h:140} };
 
 // ── Panel drag → drop ─────────────────────────────────────────
 let panelDragType = null;
@@ -305,7 +313,11 @@ svg.addEventListener('drop', e => {
 function createShape(type, x, y, text='', subject=null) {
   const id = 's' + nextId++;
   const {w,h} = DEFAULTS[type];
-  const shape = {id, type, x, y, w, h, text, subject, bold:false, fontSize:null};
+  const shape = {id, type, x, y, w, h, text, subject, bold:false, fontSize:null, textColor:null};
+  if (type === 'highlight') {
+    shape.strokeColor = '#3b82f6'; shape.strokeWidth = 2;
+    shape.dashType = 'dashed'; shape.fillColor = null; shape.glow = false;
+  }
   shapes.push(shape);
   renderShape(shape);
   refreshTable(); scheduleSave();
@@ -318,7 +330,11 @@ function renderShape(shape) {
   g.dataset.id = shape.id;
 
   let body;
-  if (shape.type==='text') {
+  if (shape.type==='highlight') {
+    body = mkSvg('rect',{rx:8,ry:8,x:shape.x,y:shape.y,width:shape.w,height:shape.h});
+    body.classList.add('shape-body','shape-highlight');
+    applyHighlightStyle(body, shape);
+  } else if (shape.type==='text') {
     body = mkSvg('rect',{rx:4,ry:4,x:shape.x,y:shape.y,width:shape.w,height:shape.h});
     body.classList.add('shape-body','shape-text');
   } else if (shape.type==='rect') {
@@ -333,12 +349,18 @@ function renderShape(shape) {
   }
   g.appendChild(body);
 
-  const fo = mkSvg('foreignObject',{x:shape.x+4,y:shape.y+4,width:shape.w-8,height:shape.h-8});
+  const foX = shape.type==='highlight' ? shape.x+10 : shape.x+4;
+  const foY = shape.type==='highlight' ? shape.y+8  : shape.y+4;
+  const foW = shape.type==='highlight' ? shape.w-20 : shape.w-8;
+  const foH = shape.type==='highlight' ? 28         : shape.h-8;
+  const fo = mkSvg('foreignObject',{x:foX,y:foY,width:foW,height:foH});
   fo.style.overflow='visible'; fo.style.pointerEvents='none';
   const div = document.createElement('div');
-  const fs = shape.fontSize || (shape.type==='text' ? 14 : 12);
-  const fw = shape.bold ? '700' : (shape.type==='text' ? '400' : '600');
-  div.style.cssText=`width:100%;height:100%;display:flex;align-items:center;justify-content:center;text-align:center;font-size:${fs}px;font-weight:${fw};color:#1e293b;font-family:inherit;word-break:break-word;line-height:1.25;pointer-events:none;user-select:none;`;
+  const fs = shape.fontSize || (shape.type==='text'||shape.type==='highlight' ? 14 : 12);
+  const fw = shape.bold ? '700' : (shape.type==='text' ? '400' : shape.type==='highlight' ? '600' : '600');
+  const fc = shape.textColor || (shape.type==='highlight' ? (shape.strokeColor||'#3b82f6') : '#1e293b');
+  const align = shape.type==='highlight' ? 'flex-start' : 'center';
+  div.style.cssText=`width:100%;height:100%;display:flex;align-items:${align};justify-content:flex-start;text-align:left;font-size:${fs}px;font-weight:${fw};color:${fc};font-family:inherit;word-break:break-word;line-height:1.25;pointer-events:none;user-select:none;${shape.type==='highlight'?'':'text-align:center;justify-content:center;'}`;
   div.textContent = shape.text;
   fo.appendChild(div); g.appendChild(fo);
 
@@ -347,7 +369,7 @@ function renderShape(shape) {
   badge.textContent = subjEmoji(shape.subject);
   g.appendChild(badge);
 
-  if (shape.type !== 'text') {
+  if (shape.type !== 'text' && shape.type !== 'highlight') {
     [[.5,0],[1,.5],[.5,1],[0,.5]].forEach(([rx,ry],i) => {
       const cp = mkSvg('circle',{cx:shape.x+shape.w*rx,cy:shape.y+shape.h*ry,r:6});
       cp.classList.add('connect-point');
@@ -356,7 +378,7 @@ function renderShape(shape) {
     });
   }
 
-  if (shape.type === 'text') {
+  if (shape.type === 'text' || shape.type === 'highlight') {
     const rh = mkSvg('rect',{x:shape.x+shape.w-7,y:shape.y+shape.h-7,width:8,height:8,rx:2});
     rh.classList.add('resize-handle');
     g.appendChild(rh);
@@ -365,7 +387,9 @@ function renderShape(shape) {
 
   applySubjClass(g, shape.subject);
   wireShapeEvents(g, shape);
-  shapesLayer.appendChild(g);
+  // highlight은 다른 도형 뒤에 렌더링
+  if (shape.type === 'highlight') highlightsLayer.appendChild(g);
+  else shapesLayer.appendChild(g);
   shape.el=g; shape.labelDiv=div; shape.badge=badge;
 }
 
@@ -380,18 +404,52 @@ function cpCoord(s,i) { return [[s.x+s.w*.5,s.y],[s.x+s.w,s.y+s.h*.5],[s.x+s.w*.
 function subjEmoji(s) { return s==='human'?'👤':s==='ai'?'🤖':''; }
 function applySubjClass(g,s) { g.classList.remove('subject-human','subject-ai'); if(s==='human')g.classList.add('subject-human'); if(s==='ai')g.classList.add('subject-ai'); }
 
+const DASH_MAP = { solid:'none', dashed:'10 5', dotted:'2 6', dashdot:'10 4 2 4' };
+function applyHighlightStyle(el, shape) {
+  el.setAttribute('stroke',         shape.strokeColor || '#3b82f6');
+  el.setAttribute('stroke-width',   shape.strokeWidth || 2);
+  el.setAttribute('stroke-dasharray', DASH_MAP[shape.dashType||'dashed'] || '10 5');
+  if (shape.fillColor) {
+    el.setAttribute('fill', shape.fillColor);
+    el.setAttribute('fill-opacity', '0.12');
+  } else {
+    el.setAttribute('fill', 'none');
+    el.removeAttribute('fill-opacity');
+  }
+  if (shape.glow) {
+    el.classList.add('has-glow');
+    el.style.setProperty('--glow-c', shape.strokeColor || '#3b82f6');
+  } else {
+    el.classList.remove('has-glow');
+    el.style.removeProperty('--glow-c');
+  }
+}
+
 function syncShapeDOM(shape) {
   const g=shape.el, body=g.querySelector('.shape-body'), fo=g.querySelector('foreignObject');
-  if(shape.type==='text'||shape.type==='rect'){ body.setAttribute('x',shape.x); body.setAttribute('y',shape.y); body.setAttribute('width',shape.w); body.setAttribute('height',shape.h); }
-  else if(shape.type==='diamond'){ body.setAttribute('points',dpts(shape)); }
+  if(shape.type==='highlight'||shape.type==='text'||shape.type==='rect'){
+    body.setAttribute('x',shape.x); body.setAttribute('y',shape.y);
+    body.setAttribute('width',shape.w); body.setAttribute('height',shape.h);
+    if(shape.type==='highlight') applyHighlightStyle(body, shape);
+  } else if(shape.type==='diamond'){ body.setAttribute('points',dpts(shape)); }
   else { body.setAttribute('cx',shape.x+shape.w/2); body.setAttribute('cy',shape.y+shape.h/2); }
-  fo.setAttribute('x',shape.x+4); fo.setAttribute('y',shape.y+4);
-  fo.setAttribute('width',shape.w-8); fo.setAttribute('height',shape.h-8);
+
+  // foreignObject position & size
+  if (shape.type==='highlight') {
+    fo.setAttribute('x',shape.x+10); fo.setAttribute('y',shape.y+8);
+    fo.setAttribute('width',shape.w-20); fo.setAttribute('height',28);
+  } else {
+    fo.setAttribute('x',shape.x+4); fo.setAttribute('y',shape.y+4);
+    fo.setAttribute('width',shape.w-8); fo.setAttribute('height',shape.h-8);
+  }
+
   if (shape.labelDiv) {
-    const fs = shape.fontSize || (shape.type==='text' ? 14 : 12);
+    const fs = shape.fontSize || (shape.type==='text'||shape.type==='highlight' ? 14 : 12);
     const fw = shape.bold ? '700' : (shape.type==='text' ? '400' : '600');
-    shape.labelDiv.style.fontSize = fs+'px';
+    const fc = shape.textColor || (shape.type==='highlight' ? (shape.strokeColor||'#3b82f6') : '#1e293b');
+    shape.labelDiv.style.fontSize   = fs+'px';
     shape.labelDiv.style.fontWeight = fw;
+    shape.labelDiv.style.color      = fc;
   }
   shape.badge.setAttribute('x',shape.x+shape.w-5); shape.badge.setAttribute('y',shape.y+13);
   g.querySelectorAll('.connect-point').forEach((cp,i)=>{ const[cx,cy]=cpCoord(shape,i); cp.setAttribute('cx',cx); cp.setAttribute('cy',cy); });
@@ -707,16 +765,49 @@ function syncConnDOM(conn) {
 //  Context menu
 // ════════════════════════════════════════════════════════════════
 function openCtx(cx,cy,shape) {
-  ctxTargetId=shape.id;
-  document.getElementById('ctx-shape-name').textContent=(shape.text||'(텍스트 없음)')+' — '+typeLabel(shape.type);
-  document.getElementById('ctx-human').classList.toggle('active',shape.subject==='human');
-  document.getElementById('ctx-ai').classList.toggle('active',shape.subject==='ai');
-  const fs = shape.fontSize || (shape.type==='text' ? 14 : 12);
+  ctxTargetId = shape.id;
+  const isHighlight = shape.type === 'highlight';
+  const isShape     = ['rect','diamond','oval'].includes(shape.type);
+
+  document.getElementById('ctx-shape-name').textContent =
+    (shape.text||'(텍스트 없음)') + ' — ' + typeLabel(shape.type);
+
+  // 섹션 show/hide
+  document.getElementById('ctx-subject-section').classList.toggle('hidden', !isShape);
+  document.getElementById('ctx-highlight-section').classList.toggle('hidden', !isHighlight);
+
+  // 수행 주체
+  if (isShape) {
+    document.getElementById('ctx-human').classList.toggle('active', shape.subject==='human');
+    document.getElementById('ctx-ai').classList.toggle('active',    shape.subject==='ai');
+  }
+
+  // 텍스트 서식
+  const fs = shape.fontSize || (shape.type==='text'||isHighlight ? 14 : 12);
   document.getElementById('ctx-font-size').textContent = fs;
   document.getElementById('ctx-bold').style.background = shape.bold ? '#e0e7ff' : '';
-  const vw=window.innerWidth,vh=window.innerHeight,mw=210,mh=300;
-  ctxMenu.style.left=(cx+mw>vw?cx-mw:cx)+'px'; ctxMenu.style.top=(cy+mh>vh?cy-mh:cy)+'px';
+  document.getElementById('ctx-text-color').value = shape.textColor ||
+    (isHighlight ? (shape.strokeColor||'#3b82f6') : '#1e293b');
+
+  // 올가미 스타일
+  if (isHighlight) {
+    document.getElementById('ctx-stroke-color').value = shape.strokeColor || '#3b82f6';
+    document.getElementById('ctx-fill-color').value   = shape.fillColor   || '#3b82f6';
+    document.getElementById('ctx-sw-val').textContent = shape.strokeWidth || 2;
+    document.getElementById('ctx-glow-toggle').classList.toggle('active', !!shape.glow);
+    updateDashButtons(shape.dashType || 'dashed');
+  }
+
+  const vw=window.innerWidth, vh=window.innerHeight, mw=256, mh=isHighlight?480:360;
+  ctxMenu.style.left = (cx+mw>vw ? cx-mw : cx) + 'px';
+  ctxMenu.style.top  = (cy+mh>vh ? cy-mh : cy) + 'px';
   ctxMenu.classList.remove('hidden');
+}
+
+function updateDashButtons(active) {
+  ['solid','dashed','dotted','dashdot'].forEach(t => {
+    document.getElementById('ctx-dash-'+t)?.classList.toggle('active', t === active);
+  });
 }
 function closeCtx() { ctxMenu.classList.add('hidden'); ctxTargetId=null; }
 document.addEventListener('click',  e=>{ if(!ctxMenu.contains(e.target)) closeCtx(); });
@@ -757,9 +848,64 @@ document.getElementById('ctx-font-dec').addEventListener('click', () => {
 document.getElementById('ctx-font-inc').addEventListener('click', () => {
   const s = shapes.find(sh=>sh.id===ctxTargetId); if (!s) return;
   pushHistory();
-  s.fontSize = Math.min(48, (s.fontSize || (s.type==='text' ? 14 : 12)) + 1);
+  s.fontSize = Math.min(48, (s.fontSize || (s.type==='text'||s.type==='highlight' ? 14 : 12)) + 1);
   syncShapeDOM(s);
   document.getElementById('ctx-font-size').textContent = s.fontSize;
+  scheduleSave();
+});
+
+// 글자 색
+document.getElementById('ctx-text-color').addEventListener('input', e => {
+  const s = shapes.find(sh=>sh.id===ctxTargetId); if (!s) return;
+  s.textColor = e.target.value; syncShapeDOM(s); scheduleSave();
+});
+document.getElementById('ctx-text-color-reset').addEventListener('click', () => {
+  const s = shapes.find(sh=>sh.id===ctxTargetId); if (!s) return;
+  s.textColor = null; syncShapeDOM(s);
+  document.getElementById('ctx-text-color').value =
+    s.type==='highlight' ? (s.strokeColor||'#3b82f6') : '#1e293b';
+  scheduleSave();
+});
+
+// ── 올가미 스타일 핸들러 ──────────────────────────────────────
+['solid','dashed','dotted','dashdot'].forEach(type => {
+  document.getElementById('ctx-dash-'+type)?.addEventListener('click', () => {
+    const s = shapes.find(sh=>sh.id===ctxTargetId); if (!s) return;
+    pushHistory(); s.dashType = type;
+    syncShapeDOM(s); updateDashButtons(type); scheduleSave();
+  });
+});
+
+document.getElementById('ctx-sw-dec').addEventListener('click', () => {
+  const s = shapes.find(sh=>sh.id===ctxTargetId); if (!s) return;
+  pushHistory(); s.strokeWidth = Math.max(1, (s.strokeWidth||2) - 1);
+  document.getElementById('ctx-sw-val').textContent = s.strokeWidth;
+  syncShapeDOM(s); scheduleSave();
+});
+document.getElementById('ctx-sw-inc').addEventListener('click', () => {
+  const s = shapes.find(sh=>sh.id===ctxTargetId); if (!s) return;
+  pushHistory(); s.strokeWidth = Math.min(12, (s.strokeWidth||2) + 1);
+  document.getElementById('ctx-sw-val').textContent = s.strokeWidth;
+  syncShapeDOM(s); scheduleSave();
+});
+
+document.getElementById('ctx-stroke-color').addEventListener('input', e => {
+  const s = shapes.find(sh=>sh.id===ctxTargetId); if (!s) return;
+  s.strokeColor = e.target.value; syncShapeDOM(s); scheduleSave();
+});
+document.getElementById('ctx-fill-color').addEventListener('input', e => {
+  const s = shapes.find(sh=>sh.id===ctxTargetId); if (!s) return;
+  s.fillColor = e.target.value; syncShapeDOM(s); scheduleSave();
+});
+document.getElementById('ctx-fill-clear').addEventListener('click', () => {
+  const s = shapes.find(sh=>sh.id===ctxTargetId); if (!s) return;
+  s.fillColor = null; syncShapeDOM(s); scheduleSave();
+});
+document.getElementById('ctx-glow-toggle').addEventListener('click', () => {
+  const s = shapes.find(sh=>sh.id===ctxTargetId); if (!s) return;
+  pushHistory(); s.glow = !s.glow;
+  syncShapeDOM(s);
+  document.getElementById('ctx-glow-toggle').classList.toggle('active', s.glow);
   scheduleSave();
 });
 
@@ -897,7 +1043,7 @@ document.addEventListener('keydown', e => {
 // ════════════════════════════════════════════════════════════════
 //  Table
 // ════════════════════════════════════════════════════════════════
-function typeLabel(t){ return t==='rect'?'일반 프로세스':t==='diamond'?'의사결정':t==='text'?'텍스트 상자':'시작/종료'; }
+function typeLabel(t){ return t==='rect'?'일반 프로세스':t==='diamond'?'의사결정':t==='text'?'텍스트 상자':t==='highlight'?'올가미 상자':'시작/종료'; }
 
 function getFollowups(shape) {
   const outs=connections.filter(c=>c.fromId===shape.id);
@@ -910,19 +1056,21 @@ function getFollowups(shape) {
 }
 
 function refreshTable() {
-  const h=shapes.filter(s=>s.subject==='human').length;
-  const a=shapes.filter(s=>s.subject==='ai').length;
-  tableCount.textContent=shapes.length+'개';
+  // text/highlight는 분석 테이블 제외
+  const processShapes = shapes.filter(s=>s.type!=='text'&&s.type!=='highlight');
+  const h=processShapes.filter(s=>s.subject==='human').length;
+  const a=processShapes.filter(s=>s.subject==='ai').length;
+  tableCount.textContent=processShapes.length+'개';
   const statH=document.getElementById('stat-human');
   const statA=document.getElementById('stat-ai');
   if (statH) statH.innerHTML=`<span class="w-1.5 h-1.5 rounded-full bg-blue-500 inline-block"></span> 사람 ${h}`;
   if (statA) statA.innerHTML=`<span class="w-1.5 h-1.5 rounded-full bg-purple-500 inline-block"></span> AI ${a}`;
 
-  if (!shapes.length) {
+  if (!processShapes.length) {
     tableBody.innerHTML='<tr><td colspan="5" class="px-3 py-5 text-center text-slate-400 text-xs">캔버스에 도형을 추가하면 자동 정리됩니다.</td></tr>';
     return;
   }
-  tableBody.innerHTML=shapes.map((s,i)=>{
+  tableBody.innerHTML=processShapes.map((s,i)=>{
     const row=s.subject==='human'?'row-human':s.subject==='ai'?'row-ai':'';
     const tb=s.type==='diamond'?'<span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-700">◇ 의사결정</span>':s.type==='oval'?'<span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-700">⬭ 시작/종료</span>':'<span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-50 text-blue-600">□ 프로세스</span>';
     const sb=s.subject==='human'?'<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-700">👤 사람</span>':s.subject==='ai'?'<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-700">🤖 AI</span>':'<span class="px-2 py-0.5 rounded-full text-[10px] bg-slate-100 text-slate-400">미지정</span>';

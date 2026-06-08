@@ -75,6 +75,33 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; }
 .shape-group:hover .resize-handle,
 .shape-group.selected .resize-handle { opacity: 0.85; }
 
+/* ── Highlight (올가미) box ──────────────────────────────────── */
+.shape-highlight {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: stroke .15s, stroke-width .15s, fill .15s;
+  filter: none;
+}
+.shape-group.selected .shape-highlight { filter: none !important; }
+
+/* ── Glow effect ─────────────────────────────────────────────── */
+@keyframes highlight-pulse {
+  0%,100% { filter: drop-shadow(0 0 4px var(--glow-c, #3b82f6))
+                    drop-shadow(0 0 10px var(--glow-c, #3b82f6)); }
+  50%     { filter: drop-shadow(0 0 11px var(--glow-c, #3b82f6))
+                    drop-shadow(0 0 26px var(--glow-c, #3b82f6)); }
+}
+.has-glow { animation: highlight-pulse 2.4s ease-in-out infinite; }
+
+/* ── Dash / glow buttons ─────────────────────────────────────── */
+.dash-opt        { background:transparent; border:1px solid #e2e8f0; color:#64748b;
+                   transition:background .1s, border-color .1s, color .1s; font-size:11px; }
+.dash-opt:hover  { background:#f1f5f9; }
+.dash-opt.active { background:#e0e7ff; border-color:#818cf8; color:#4f46e5; }
+#ctx-glow-toggle.active { background:#faf5ff; color:#7c3aed;
+  outline:2px solid #c4b5fd; outline-offset:-2px; border-radius:8px; }
+
 /* Connect points */
 .connect-point {
   fill: #fff;

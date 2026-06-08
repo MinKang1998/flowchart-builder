@@ -102,6 +102,10 @@
         <div class="w-9 h-6 rounded border border-dashed border-slate-400 flex items-center justify-center flex-shrink-0 text-[9px] text-slate-400 font-bold">T</div>
         <div><p class="text-[11px] font-semibold text-slate-700">텍스트 상자</p><p class="text-[10px] text-slate-400">자유 텍스트</p></div>
       </div>
+      <div class="shape-item flex items-center gap-2 p-2 rounded-lg cursor-grab border border-transparent hover:border-slate-200 hover:bg-slate-50 transition-all" draggable="true" data-type="highlight">
+        <div class="w-9 h-6 rounded border-2 border-dashed border-blue-400 flex-shrink-0 bg-blue-50/50"></div>
+        <div><p class="text-[11px] font-semibold text-slate-700">올가미 상자</p><p class="text-[10px] text-slate-400">영역 강조</p></div>
+      </div>
     </div>
 
     <div class="p-2.5 border-t border-slate-100">
@@ -154,6 +158,7 @@
         <rect id="grid-bg" width="100%" height="100%" fill="url(#grid)"/>
         <!-- All zoomed/panned content lives here -->
         <g id="viewport">
+          <g id="highlights-layer"></g>
           <g id="connections-layer"></g>
           <g id="shapes-layer"></g>
           <g id="temp-layer"></g>
@@ -253,9 +258,12 @@
 </div>
 
 <!-- ── Context Menu ──────────────────────────────────────────── -->
-<div id="context-menu" class="fixed hidden z-[200] bg-white rounded-xl shadow-2xl border border-slate-200 w-52 overflow-hidden">
+<!-- Context menu — width w-64 to fit highlight controls -->
+<div id="context-menu" class="fixed hidden z-[200] bg-white rounded-xl shadow-2xl border border-slate-200 w-64 overflow-y-auto" style="max-height:90vh">
   <div id="ctx-shape-name" class="px-4 py-2.5 bg-slate-50 border-b border-slate-100 text-xs font-semibold text-slate-600 truncate"></div>
-  <div class="p-1.5">
+
+  <!-- ① 수행 주체 (rect/diamond/oval 전용) -->
+  <div id="ctx-subject-section" class="p-1.5">
     <p class="px-2 py-1 text-[9px] font-bold text-slate-400 uppercase tracking-wider">수행 주체</p>
     <button id="ctx-human" class="ctx-opt w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg hover:bg-blue-50 transition-colors group">
       <span class="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-sm group-hover:bg-blue-200 transition-colors">👤</span>
@@ -270,6 +278,8 @@
       <p class="text-xs font-medium text-slate-500">주체 해제</p>
     </button>
   </div>
+
+  <!-- ② 텍스트 서식 (모든 타입) -->
   <div id="ctx-format-section" class="border-t border-slate-100 p-1.5">
     <p class="px-2 py-1 text-[9px] font-bold text-slate-400 uppercase tracking-wider">텍스트 서식</p>
     <div class="flex items-center gap-1 px-1.5 py-1">
@@ -278,7 +288,51 @@
       <span id="ctx-font-size" class="text-xs text-slate-500 font-mono w-8 text-center">14</span>
       <button id="ctx-font-inc" title="글자 크게" class="w-7 h-7 rounded-lg border border-slate-200 hover:bg-slate-50 text-sm text-slate-600 flex items-center justify-center transition-colors">+</button>
     </div>
+    <!-- 글자 색 -->
+    <div class="flex items-center gap-2 px-1.5 py-1">
+      <span class="text-[10px] text-slate-500 w-10 shrink-0">글자 색</span>
+      <input type="color" id="ctx-text-color" value="#1e293b"
+        class="w-7 h-7 rounded cursor-pointer border border-slate-200 p-0.5 bg-white"/>
+      <button id="ctx-text-color-reset" class="text-[10px] text-slate-400 hover:text-slate-700 px-1.5 py-0.5 rounded border border-slate-200 hover:border-slate-400 transition-colors">초기화</button>
+    </div>
   </div>
+
+  <!-- ③ 올가미 스타일 (highlight 전용) -->
+  <div id="ctx-highlight-section" class="border-t border-slate-100 p-1.5 hidden">
+    <p class="px-2 py-1 text-[9px] font-bold text-slate-400 uppercase tracking-wider">테두리 스타일</p>
+    <!-- 대시 종류 -->
+    <div class="grid grid-cols-4 gap-1 px-1 mb-2">
+      <button id="ctx-dash-solid"   class="dash-opt h-8 rounded text-center py-1" title="실선">—</button>
+      <button id="ctx-dash-dashed"  class="dash-opt h-8 rounded text-center py-1" title="대시">╌╌</button>
+      <button id="ctx-dash-dotted"  class="dash-opt h-8 rounded text-center py-1" title="점선">····</button>
+      <button id="ctx-dash-dashdot" class="dash-opt h-8 rounded text-center py-1" title="대시점">-·-</button>
+    </div>
+    <!-- 두께 -->
+    <div class="flex items-center gap-1 px-1.5 mb-2">
+      <span class="text-[10px] text-slate-500 w-8 shrink-0">두께</span>
+      <button id="ctx-sw-dec" class="w-7 h-7 rounded-lg border border-slate-200 hover:bg-slate-50 text-sm text-slate-600 flex items-center justify-center transition-colors">−</button>
+      <span id="ctx-sw-val" class="text-xs text-slate-600 font-mono w-6 text-center">2</span>
+      <button id="ctx-sw-inc" class="w-7 h-7 rounded-lg border border-slate-200 hover:bg-slate-50 text-sm text-slate-600 flex items-center justify-center transition-colors">+</button>
+    </div>
+    <!-- 선 색 & 채우기 색 -->
+    <div class="flex items-center gap-2 px-1.5 mb-2 flex-wrap">
+      <span class="text-[10px] text-slate-500 w-8 shrink-0">선 색</span>
+      <input type="color" id="ctx-stroke-color" value="#3b82f6"
+        class="w-7 h-7 rounded cursor-pointer border border-slate-200 p-0.5 bg-white"/>
+      <span class="text-[10px] text-slate-500 ml-1 shrink-0">채우기</span>
+      <input type="color" id="ctx-fill-color" value="#3b82f6"
+        class="w-7 h-7 rounded cursor-pointer border border-slate-200 p-0.5 bg-white"/>
+      <button id="ctx-fill-clear" class="text-[10px] text-slate-400 hover:text-slate-700 px-1.5 py-0.5 rounded border border-slate-200 hover:border-slate-400 transition-colors">없음</button>
+    </div>
+    <!-- 반짝 효과 -->
+    <div class="px-1.5">
+      <button id="ctx-glow-toggle" class="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-slate-500 hover:bg-slate-50 transition-colors rounded-lg">
+        ✨ 반짝 효과 (Glow)
+      </button>
+    </div>
+  </div>
+
+  <!-- ④ 액션 -->
   <div class="border-t border-slate-100 p-1.5">
     <button id="ctx-edit"   class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-slate-50 text-xs text-slate-500 transition-colors"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>텍스트 편집</button>
     <button id="ctx-delete" class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-red-50 text-xs text-red-500 transition-colors"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>삭제</button>
