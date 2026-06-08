@@ -3,8 +3,10 @@
 //  editor.js  —  Flowchart editor
 //  · 빈 공간 드래그 = 캔버스 이동 (pan)
 //  · Space + 드래그 = 올가미 선택 (lasso)
-//  · 다중 선택 → Ctrl+C / Ctrl+V 복붙
+//  · Ctrl+C / Ctrl+V = 복사 / 붙여넣기
+//  · Ctrl + 도형 드래그 = 복제 이동
 //  · Ctrl+Z = 실행 취소 (undo, 50단계)
+//  · 화살표 곡선 = 연결점 방향 기반 베지어 (수직/수평 모두 자연스럽게)
 // ════════════════════════════════════════════════════════════════
 
 // ── DOM ───────────────────────────────────────────────────────
@@ -377,7 +379,7 @@ function syncShapeDOM(shape) {
 //  Shape events
 // ════════════════════════════════════════════════════════════════
 function wireShapeEvents(g, shape) {
-  let drag=false, ox=0, oy=0, didMove=false;
+  let drag=false, didMove=false;
 
   g.addEventListener('mousedown', e => {
     if (panActive || spaceDown || lassoActive) return;
@@ -386,31 +388,44 @@ function wireShapeEvents(g, shape) {
     e.stopPropagation();
     closeCtx();
 
-    // Multi-select with Ctrl/Cmd
-    if (e.ctrlKey || e.metaKey) {
+    const isCtrl = e.ctrlKey || e.metaKey;
+
+    // Ctrl+click on unselected shape = toggle selection only (no drag-copy)
+    // Ctrl+click on already-selected group = start duplicate-drag
+    if (isCtrl && !selectedIds.has(shape.id)) {
       toggleSelectShape(shape.id);
-    } else {
-      if (!selectedIds.has(shape.id)) { clearSel(); addSelectShape(shape.id); }
+      return; // don't start drag
+    }
+    if (!isCtrl && !selectedIds.has(shape.id)) {
+      clearSel(); addSelectShape(shape.id);
     }
 
-    drag=true; didMove=false;
     const {x:sx,y:sy}=svgOff(e.clientX,e.clientY);
     const c=toCanvas(sx,sy);
-    ox=c.x-shape.x; oy=c.y-shape.y;
+    drag=true; didMove=false;
 
-    const snapShapes = [...selectedIds]
-      .map(id=>shapes.find(s=>s.id===id)).filter(Boolean);
-
-    const startPositions = snapShapes.map(s=>({s, ox:c.x-s.x, oy:c.y-s.y}));
+    // ── Ctrl+drag on selected group → duplicate then drag copies ──
+    let movers; // array of {s, ox, oy}
+    if (isCtrl && selectedIds.size > 0) {
+      pushHistory();
+      const { newShapes, idMap } = duplicateSelected();
+      // Clear selection → select copies
+      clearSel();
+      newShapes.forEach(s => { selectedIds.add(s.id); s.el.classList.add('selected'); });
+      movers = newShapes.map(s => ({ s, ox: c.x-s.x, oy: c.y-s.y }));
+      showToast(`${newShapes.length}개 복제됨  ↕ 드래그로 위치 지정`);
+    } else {
+      movers = [...selectedIds]
+        .map(id=>shapes.find(s=>s.id===id)).filter(Boolean)
+        .map(s=>({ s, ox: c.x-s.x, oy: c.y-s.y }));
+    }
 
     const onMove = ev => {
       if (!drag) return;
       const {x:sx2,y:sy2}=svgOff(ev.clientX,ev.clientY);
       const p=toCanvas(sx2,sy2);
       didMove=true;
-      startPositions.forEach(({s,ox:ox2,oy:oy2})=>{
-        s.x=p.x-ox2; s.y=p.y-oy2; syncShapeDOM(s);
-      });
+      movers.forEach(({s,ox:ox2,oy:oy2})=>{ s.x=p.x-ox2; s.y=p.y-oy2; syncShapeDOM(s); });
     };
     const onUp = () => {
       drag=false;
@@ -580,15 +595,29 @@ function toggleLabel(conn) {
   refreshTable(); scheduleSave();
 }
 
+// Outward-normal direction per connection-point index: top right bottom left
+const CP_DIR = [[0,-1],[1,0],[0,1],[-1,0]];
+
 function syncConnDOM(conn) {
   const fs=shapes.find(s=>s.id===conn.fromId), ts=shapes.find(s=>s.id===conn.toId);
   if(!fs||!ts||!conn.path) return;
   const [x1,y1]=cpCoord(fs,conn.fromPtIdx), [x2,y2]=cpCoord(ts,conn.toPtIdx);
-  const dx=x2-x1;
-  const d=`M ${x1} ${y1} C ${x1+dx*.4} ${y1}, ${x2-dx*.4} ${y2}, ${x2} ${y2}`;
+
+  // Control-point offset = proportional to distance, minimum 50px
+  const dist  = Math.max(Math.hypot(x2-x1, y2-y1)*0.45, 50);
+  const d1    = CP_DIR[conn.fromPtIdx];   // exit direction at source
+  const d2    = CP_DIR[conn.toPtIdx];     // outward normal at target (arrow enters opposite)
+  const cx1   = x1 + d1[0]*dist;
+  const cy1   = y1 + d1[1]*dist;
+  const cx2   = x2 + d2[0]*dist;         // pull handle outward from target side
+  const cy2   = y2 + d2[1]*dist;
+
+  const d=`M ${x1} ${y1} C ${cx1} ${cy1}, ${cx2} ${cy2}, ${x2} ${y2}`;
   conn.path.setAttribute('d',d); conn.hitPath.setAttribute('d',d);
   if (conn.labelBg) {
-    const mx=(x1+x2)/2,my=(y1+y2)/2;
+    // Place label at cubic bezier midpoint (t=0.5)
+    const mx=0.125*x1+0.375*cx1+0.375*cx2+0.125*x2;
+    const my=0.125*y1+0.375*cy1+0.375*cy2+0.125*y2;
     conn.labelBg.setAttribute('x',mx-11); conn.labelBg.setAttribute('y',my-8);
     conn.labelTxt.setAttribute('x',mx);   conn.labelTxt.setAttribute('y',my);
   }
@@ -647,6 +676,29 @@ document.getElementById('btn-delete').addEventListener('click', deleteSelected);
 // ════════════════════════════════════════════════════════════════
 //  Copy / Paste  (Ctrl+C / Ctrl+V)
 // ════════════════════════════════════════════════════════════════
+// Duplicate selected shapes (+ internal connections) in-place, return new objects
+function duplicateSelected() {
+  const selShapes = shapes.filter(s => selectedIds.has(s.id));
+  const selIds    = new Set(selShapes.map(s => s.id));
+  const selConns  = connections.filter(c => selIds.has(c.fromId) && selIds.has(c.toId));
+  const idMap     = {};
+
+  const newShapes = selShapes.map(s => {
+    const newId = 's' + nextId++;
+    idMap[s.id] = newId;
+    return { id:newId, type:s.type, x:s.x, y:s.y, w:s.w, h:s.h, text:s.text, subject:s.subject };
+  });
+  const newConns = selConns.map(c => ({
+    id:'c'+nextId++, fromId:idMap[c.fromId], toId:idMap[c.toId],
+    fromPtIdx:c.fromPtIdx, toPtIdx:c.toPtIdx, label:c.label
+  }));
+
+  newShapes.forEach(s => { shapes.push(s); renderShape(s); });
+  newConns.forEach(c  => { connections.push(c); renderConnection(c); });
+  refreshTable();
+  return { newShapes, idMap };
+}
+
 function copySelected() {
   const selShapes = shapes.filter(s=>selectedIds.has(s.id));
   if (!selShapes.length) return;
