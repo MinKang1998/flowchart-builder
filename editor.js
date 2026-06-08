@@ -902,68 +902,48 @@ document.getElementById('btn-export-json').addEventListener('click', async () =>
   const a=Object.assign(document.createElement('a'),{href:URL.createObjectURL(blob),download:(meta.name||'flowchart')+'.json'}); a.click(); URL.revokeObjectURL(a.href);
 });
 
-document.getElementById('btn-export-pdf').addEventListener('click',()=>{
-  if (!shapes.length) return;
-  const PAD = 40;
-  const minX = Math.min(...shapes.map(s=>s.x)) - PAD;
-  const minY = Math.min(...shapes.map(s=>s.y)) - PAD;
-  const maxX = Math.max(...shapes.map(s=>s.x+s.w)) + PAD;
-  const maxY = Math.max(...shapes.map(s=>s.y+s.h)) + PAD;
-  const W = maxX - minX, H = maxY - minY;
+// ════════════════════════════════════════════════════════════════
+//  Save As (다른 이름으로 저장)
+// ════════════════════════════════════════════════════════════════
+const modalSaveAs = document.getElementById('modal-save-as');
 
-  // Clone SVG fitted to content, strip UI-only elements
-  const clone = svg.cloneNode(true);
-  clone.setAttribute('width', W); clone.setAttribute('height', H);
-  clone.setAttribute('viewBox', `${minX} ${minY} ${W} ${H}`);
-  clone.querySelector('#viewport')?.removeAttribute('transform');
-  clone.querySelector('#tempLayer')?.remove();
-  clone.querySelectorAll('.connect-point').forEach(el => el.remove());
-  clone.querySelector('#grid-bg')?.remove(); // remove dot grid
+document.getElementById('btn-save-as').addEventListener('click', () => {
+  document.getElementById('sa-name').value = '';
+  document.getElementById('sa-desc').value = '';
+  document.getElementById('sa-owner').value = '';
+  document.getElementById('sa-password').value = '';
+  modalSaveAs.classList.remove('hidden'); modalSaveAs.classList.add('flex');
+  setTimeout(() => document.getElementById('sa-name').focus(), 50);
+});
+document.getElementById('sa-cancel').addEventListener('click', () => {
+  modalSaveAs.classList.add('hidden'); modalSaveAs.classList.remove('flex');
+});
+document.getElementById('sa-confirm').addEventListener('click', async () => {
+  const name = document.getElementById('sa-name').value.trim();
+  if (!name) { document.getElementById('sa-name').focus(); return; }
+  const password = document.getElementById('sa-password').value;
+  if (!password) { document.getElementById('sa-password').focus(); return; }
 
-  // Embed CSS so colors render when SVG is loaded as <img> (external stylesheet not applied)
-  const styleEl = document.createElementNS('http://www.w3.org/2000/svg','style');
-  styleEl.textContent = `
-    .shape-body{stroke-width:2;}
-    .shape-rect{fill:#dbeafe;stroke:#3b82f6;}
-    .shape-diamond{fill:#fef3c7;stroke:#f59e0b;}
-    .shape-oval{fill:#dcfce7;stroke:#22c55e;}
-    .subject-human .shape-body{stroke:#1d4ed8!important;stroke-width:2.5!important;}
-    .subject-human .shape-rect,.subject-human .shape-diamond,.subject-human .shape-oval{fill:#bfdbfe!important;}
-    .subject-ai .shape-body{stroke:#7c3aed!important;stroke-width:2.5!important;}
-    .subject-ai .shape-rect,.subject-ai .shape-diamond,.subject-ai .shape-oval{fill:#ede9fe!important;}
-    .connection{fill:none;stroke:#64748b;stroke-width:2;marker-end:url(#arrowhead);}
-    .yn-line{stroke:#7c3aed;marker-end:url(#arrowhead-yn);}
-    .conn-label-bg{fill:#fff;stroke:#d1d5db;stroke-width:1;}
-    .conn-label-bg.yn-yes{fill:#d1fae5;stroke:#6ee7b7;}
-    .conn-label-bg.yn-no{fill:#fee2e2;stroke:#fca5a5;}
-    .conn-label-text{font-size:11px;font-weight:700;text-anchor:middle;dominant-baseline:central;fill:#1e293b;font-family:system-ui,sans-serif;}
-    .conn-label-text.yn-yes{fill:#065f46;}
-    .conn-label-text.yn-no{fill:#991b1b;}
-    .subject-badge{font-size:11px;fill:#1e293b;font-family:system-ui,sans-serif;}
-  `;
-  clone.insertBefore(styleEl, clone.firstChild);
-
-  const svgBlob = new Blob([new XMLSerializer().serializeToString(clone)],{type:'image/svg+xml;charset=utf-8'});
-  const url = URL.createObjectURL(svgBlob);
-  const img = new Image();
-  img.onload = async () => {
-    // Render at 2× for crisp output
-    const cvs = Object.assign(document.createElement('canvas'),{width:W*2,height:H*2});
-    const ctx = cvs.getContext('2d');
-    ctx.scale(2,2); ctx.fillStyle='#f8fafc'; ctx.fillRect(0,0,W,H); ctx.drawImage(img,0,0);
-    URL.revokeObjectURL(url);
-    const meta = await DB.getProject(projectId) || {};
-    const { jsPDF } = window.jspdf;
-    const pdf = new jsPDF({ orientation: W>H?'l':'p', unit:'px', format:[W,H] });
-    const imgData = cvs.toDataURL('image/jpeg', 0.95);
-    // jsPDF px unit: 1px = 0.264583mm; convert dimensions manually
-    const pdfW = pdf.internal.pageSize.getWidth();
-    const pdfH = pdf.internal.pageSize.getHeight();
-    pdf.addImage(imgData, 'JPEG', 0, 0, pdfW, pdfH);
-    pdf.save((meta.name||'flowchart')+'.pdf');
-  };
-  img.onerror = () => { URL.revokeObjectURL(url); showToast('PDF 생성 실패 — SVG 렌더링 오류'); };
-  img.src = url;
+  const btn = document.getElementById('sa-confirm');
+  btn.disabled = true; btn.textContent = '저장 중...';
+  try {
+    const newProject = await DB.createProject({
+      name,
+      description: document.getElementById('sa-desc').value.trim(),
+      owner:       document.getElementById('sa-owner').value.trim(),
+      password
+    });
+    await DB.saveCanvas(newProject.id, {
+      shapes:      shapes.map(s=>({id:s.id,type:s.type,x:Math.round(s.x),y:Math.round(s.y),w:s.w,h:s.h,text:s.text,subject:s.subject})),
+      connections: connections.map(c=>({id:c.id,fromId:c.fromId,toId:c.toId,fromPtIdx:c.fromPtIdx,toPtIdx:c.toPtIdx,label:c.label}))
+    });
+    modalSaveAs.classList.add('hidden'); modalSaveAs.classList.remove('flex');
+    showToast(`"${name}" 으로 저장됨 ✓`);
+  } catch(e) {
+    showToast('저장 실패: ' + e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = '저장';
+  }
 });
 
 // ════════════════════════════════════════════════════════════════

@@ -16,6 +16,12 @@
     <span class="text-slate-600 text-xs hidden sm:block">| 업무 프로세스 분석 플랫폼</span>
   </div>
   <div class="flex items-center gap-2">
+    <button id="btn-upload-json"
+      class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs font-medium transition-colors">
+      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+      JSON 업로드
+    </button>
+    <input id="inp-json-file" type="file" accept=".json" class="hidden"/>
     <button id="btn-new"
       class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold transition-colors">
       <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
@@ -87,6 +93,42 @@
         class="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-medium transition-colors">취소</button>
       <button id="btn-create"
         class="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold transition-colors">프로젝트 생성</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── JSON Upload Modal ──────────────────────────────────────── -->
+<div id="modal-upload" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[300] hidden items-center justify-center p-4">
+  <div class="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-md">
+    <div class="p-6 border-b border-slate-800">
+      <h2 class="text-base font-bold text-slate-100">JSON 파일로 프로젝트 만들기</h2>
+      <p id="upload-filename" class="text-xs text-emerald-400 mt-1 truncate"></p>
+    </div>
+    <div class="p-6 space-y-4">
+      <div>
+        <label class="block text-xs font-semibold text-slate-400 mb-1.5">프로젝트 이름 <span class="text-red-400">*</span></label>
+        <input id="ul-name" type="text" placeholder="예) 구매 승인 프로세스"
+          class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-500 outline-none focus:border-blue-500 transition-colors"/>
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-slate-400 mb-1.5">설명 (선택)</label>
+        <textarea id="ul-desc" rows="2" placeholder="간단한 설명..."
+          class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-500 outline-none focus:border-blue-500 resize-none transition-colors"></textarea>
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-slate-400 mb-1.5">담당자 (선택)</label>
+        <input id="ul-owner" type="text" placeholder="예) 김민준"
+          class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-500 outline-none focus:border-blue-500 transition-colors"/>
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-slate-400 mb-1.5">수정 비밀번호 <span class="text-red-400">*</span></label>
+        <input id="ul-password" type="password" placeholder="수정 권한 비밀번호 설정"
+          class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-500 outline-none focus:border-blue-500 transition-colors"/>
+      </div>
+    </div>
+    <div class="px-6 pb-6 flex gap-2 justify-end">
+      <button id="btn-cancel-upload" class="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-medium transition-colors">취소</button>
+      <button id="btn-confirm-upload" class="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold transition-colors">업로드 & 생성</button>
     </div>
   </div>
 </div>
@@ -331,6 +373,72 @@ function showToast(msg) {
   document.body.appendChild(t);
   setTimeout(() => { t.style.opacity = '0'; setTimeout(() => t.remove(), 300); }, 2500);
 }
+
+// ── JSON Upload ────────────────────────────────────────────────
+let uploadedCanvasData = null;
+const modalUpload = document.getElementById('modal-upload');
+const fileInput   = document.getElementById('inp-json-file');
+
+document.getElementById('btn-upload-json').addEventListener('click', () => {
+  fileInput.value = ''; fileInput.click();
+});
+
+fileInput.addEventListener('change', () => {
+  const file = fileInput.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const data = JSON.parse(e.target.result);
+      // Support both raw {shapes,connections} and the full export format {project,shapes,connections}
+      const shapes      = data.shapes      || [];
+      const connections = data.connections || [];
+      uploadedCanvasData = { shapes, connections };
+      document.getElementById('upload-filename').textContent = `📎 ${file.name}  (도형 ${shapes.length}개, 연결 ${connections.length}개)`;
+      // Pre-fill name from project field if present
+      document.getElementById('ul-name').value     = data.project?.name || file.name.replace('.json','');
+      document.getElementById('ul-desc').value     = data.project?.description || '';
+      document.getElementById('ul-owner').value    = data.project?.owner || '';
+      document.getElementById('ul-password').value = '';
+      modalUpload.classList.remove('hidden'); modalUpload.classList.add('flex');
+      setTimeout(() => document.getElementById('ul-name').focus(), 50);
+    } catch {
+      showToast('JSON 파일을 읽을 수 없습니다.');
+    }
+  };
+  reader.readAsText(file);
+});
+
+document.getElementById('btn-cancel-upload').addEventListener('click', () => {
+  modalUpload.classList.add('hidden'); modalUpload.classList.remove('flex');
+  uploadedCanvasData = null;
+});
+
+document.getElementById('btn-confirm-upload').addEventListener('click', async () => {
+  const name = document.getElementById('ul-name').value.trim();
+  if (!name) { document.getElementById('ul-name').focus(); return; }
+  const password = document.getElementById('ul-password').value;
+  if (!password) { document.getElementById('ul-password').focus(); return; }
+
+  const btn = document.getElementById('btn-confirm-upload');
+  btn.disabled = true; btn.textContent = '생성 중...';
+  try {
+    const p = await DB.createProject({
+      name,
+      description: document.getElementById('ul-desc').value.trim(),
+      owner:       document.getElementById('ul-owner').value.trim(),
+      password
+    });
+    await DB.saveCanvas(p.id, uploadedCanvasData);
+    modalUpload.classList.add('hidden'); modalUpload.classList.remove('flex');
+    uploadedCanvasData = null;
+    location.href = `editor.html?id=${p.id}&mode=edit`;
+  } catch(e) {
+    showToast('업로드 실패: ' + e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = '업로드 & 생성';
+  }
+});
 
 // ── Boot: real-time subscription ──────────────────────────────
 DB.subscribeProjects(renderDashboard);
