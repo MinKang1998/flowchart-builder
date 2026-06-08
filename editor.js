@@ -944,8 +944,9 @@ function refreshTable() {
 // ════════════════════════════════════════════════════════════════
 function setSaveStatus(s) {
   const dot=document.getElementById('save-dot'), txt=document.getElementById('save-text');
-  if (s==='saving'){ dot.className='w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse'; txt.textContent='저장 중...'; }
-  else              { dot.className='w-1.5 h-1.5 rounded-full bg-emerald-400'; txt.textContent='저장됨'; }
+  if      (s==='saving'){ dot.className='w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse'; txt.textContent='저장 중...'; }
+  else if (s==='error') { dot.className='w-1.5 h-1.5 rounded-full bg-red-500';                 txt.textContent='저장 실패'; }
+  else                  { dot.className='w-1.5 h-1.5 rounded-full bg-emerald-400';              txt.textContent='저장됨'; }
 }
 function scheduleSave() {
   if (readOnly) return;
@@ -954,12 +955,13 @@ function scheduleSave() {
 async function doSave() {
   if (!projectId || readOnly) return;
   try {
-    await DB.saveCanvas(projectId, {
-      shapes:      shapes.map(s=>({id:s.id,type:s.type,x:Math.round(s.x),y:Math.round(s.y),w:s.w,h:s.h,text:s.text,subject:s.subject,bold:s.bold||undefined,fontSize:s.fontSize||undefined})),
-      connections: connections.map(c=>({id:c.id,fromId:c.fromId,toId:c.toId,fromPtIdx:c.fromPtIdx,toPtIdx:c.toPtIdx,label:c.label}))
-    });
+    await DB.saveCanvas(projectId, { shapes, connections });
     setSaveStatus('saved');
-  } catch(e) { console.error('save failed', e); setSaveStatus('saved'); }
+  } catch(e) {
+    console.error('save failed', e);
+    setSaveStatus('error');
+    showToast('⚠️ 저장 실패 — 네트워크 또는 권한 문제');
+  }
 }
 
 function loadCanvas(data) {
@@ -983,7 +985,18 @@ document.getElementById('btn-share').addEventListener('click', async () => {
 document.getElementById('btn-export-json').addEventListener('click', async () => {
   await doSave();
   const meta = await DB.getProject(projectId) || {};
-  const blob = new Blob([JSON.stringify({project:meta,shapes:shapes.map(s=>({id:s.id,type:s.type,x:Math.round(s.x),y:Math.round(s.y),w:s.w,h:s.h,text:s.text,subject:s.subject,bold:s.bold||undefined,fontSize:s.fontSize||undefined})),connections:connections.map(c=>({id:c.id,fromId:c.fromId,toId:c.toId,fromPtIdx:c.fromPtIdx,toPtIdx:c.toPtIdx,label:c.label})),analysis:shapes.map((s,i)=>({seq:i+1,name:s.text||'(미입력)',type:typeLabel(s.type),subject:s.subject==='human'?'사람':s.subject==='ai'?'AI':'미지정',followups:connections.filter(c=>c.fromId===s.id).map(c=>({target:shapes.find(sh=>sh.id===c.toId)?.text||'?',label:c.label}))}))},null,2)],{type:'application/json'});
+  const safeShapes = shapes.map(s => {
+    const o = {id:s.id,type:s.type,x:Math.round(s.x),y:Math.round(s.y),w:s.w,h:s.h,text:s.text||'',subject:s.subject||null};
+    if (s.bold)     o.bold     = s.bold;
+    if (s.fontSize) o.fontSize = s.fontSize;
+    return o;
+  });
+  const blob = new Blob([JSON.stringify({
+    project: meta,
+    shapes: safeShapes,
+    connections: connections.map(c=>({id:c.id,fromId:c.fromId,toId:c.toId,fromPtIdx:c.fromPtIdx,toPtIdx:c.toPtIdx,label:c.label||''})),
+    analysis: shapes.map((s,i)=>({seq:i+1,name:s.text||'(미입력)',type:typeLabel(s.type),subject:s.subject==='human'?'사람':s.subject==='ai'?'AI':'미지정',followups:connections.filter(c=>c.fromId===s.id).map(c=>({target:shapes.find(sh=>sh.id===c.toId)?.text||'?',label:c.label}))}))
+  },null,2)],{type:'application/json'});
   const a=Object.assign(document.createElement('a'),{href:URL.createObjectURL(blob),download:(meta.name||'flowchart')+'.json'}); a.click(); URL.revokeObjectURL(a.href);
 });
 
@@ -1019,8 +1032,7 @@ document.getElementById('sa-confirm').addEventListener('click', async () => {
       password
     });
     await DB.saveCanvas(newProject.id, {
-      shapes:      shapes.map(s=>({id:s.id,type:s.type,x:Math.round(s.x),y:Math.round(s.y),w:s.w,h:s.h,text:s.text,subject:s.subject,bold:s.bold||undefined,fontSize:s.fontSize||undefined})),
-      connections: connections.map(c=>({id:c.id,fromId:c.fromId,toId:c.toId,fromPtIdx:c.fromPtIdx,toPtIdx:c.toPtIdx,label:c.label}))
+      shapes, connections
     });
     modalSaveAs.classList.add('hidden'); modalSaveAs.classList.remove('flex');
     showToast(`"${name}" 으로 저장됨 ✓`);
@@ -1030,6 +1042,38 @@ document.getElementById('sa-confirm').addEventListener('click', async () => {
     btn.disabled = false; btn.textContent = '저장';
   }
 });
+
+// ════════════════════════════════════════════════════════════════
+//  발행 (작업실 → 게시판)
+// ════════════════════════════════════════════════════════════════
+document.getElementById('btn-publish')?.addEventListener('click', async () => {
+  if (!projectId || readOnly) return;
+  const meta = await DB.getProject(projectId);
+  if (!meta) return;
+  if ((meta.status || 'draft') === 'published') {
+    if (!confirm('게시판에서 다시 작업실로 회수하시겠습니까?')) return;
+    await DB.unpublishProject(projectId);
+    updatePublishBtn('draft');
+    showToast('작업실로 회수됨 ↩');
+  } else {
+    await doSave();
+    await DB.publishProject(projectId);
+    updatePublishBtn('published');
+    showToast('🎉 게시판에 발행됨! 모두가 볼 수 있습니다.');
+  }
+});
+
+function updatePublishBtn(status) {
+  const btn = document.getElementById('btn-publish');
+  if (!btn) return;
+  if (status === 'published') {
+    btn.textContent = '📌 발행 완료';
+    btn.className = btn.className.replace(/bg-\S+/g, '').trim() + ' bg-emerald-600 hover:bg-emerald-500';
+  } else {
+    btn.textContent = '🚀 게시판 발행';
+    btn.className = btn.className.replace(/bg-\S+/g, '').trim() + ' bg-violet-600 hover:bg-violet-500';
+  }
+}
 
 // ════════════════════════════════════════════════════════════════
 //  Divider resize
@@ -1071,6 +1115,11 @@ function showToast(msg) {
   document.title = meta.name + ' – FlowChart Builder';
   document.getElementById('project-name').textContent = meta.name;
 
+  // 편집 모드인데 인증 안된 경우 → 열람 모드로 강등
+  if (!readOnly && meta.passwordHash && !DB.isAuthed(projectId)) {
+    readOnly = true;
+  }
+
   // Show view-mode banner and hide edit-only UI
   if (readOnly) {
     const banner = document.getElementById('view-banner');
@@ -1079,6 +1128,11 @@ function showToast(msg) {
     document.getElementById('btn-delete')?.style.setProperty('display','none');
     document.getElementById('btn-share')?.style.setProperty('display','none');
     document.getElementById('btn-export-json')?.style.setProperty('display','none');
+    document.getElementById('btn-publish')?.style.setProperty('display','none');
+    document.getElementById('btn-save-as') && (document.getElementById('btn-save-as').style.display='none');
+  } else {
+    // 발행 버튼 초기 상태
+    updatePublishBtn(meta.status || 'draft');
   }
 
   const data = await DB.loadCanvas(projectId);

@@ -15,7 +15,8 @@
     <span class="font-semibold text-sm tracking-tight">FlowChart Builder</span>
     <span class="text-slate-600 text-xs hidden sm:block">| 업무 프로세스 분석 플랫폼</span>
   </div>
-  <div class="flex items-center gap-2">
+  <!-- 작업실 탭에서만 보이는 버튼 -->
+  <div id="nav-draft-actions" class="flex items-center gap-2">
     <button id="btn-upload-json"
       class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs font-medium transition-colors">
       <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
@@ -30,31 +31,61 @@
   </div>
 </nav>
 
-<!-- ── Empty state ───────────────────────────────────────────── -->
-<div id="empty-state" class="hidden flex-col items-center justify-center py-28 px-6 text-center">
-  <div class="w-16 h-16 rounded-2xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center mb-4">
-    <svg class="w-8 h-8 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 0v10m0-10a2 2 0 012 2h2a2 2 0 012-2V7"/></svg>
+<!-- ── Tabs ───────────────────────────────────────────────────── -->
+<div class="border-b border-slate-800 px-6">
+  <div class="flex gap-0 max-w-6xl mx-auto">
+    <button id="tab-draft"
+      class="tab-btn px-5 py-3 text-sm font-semibold border-b-2 transition-colors flex items-center gap-2">
+      🛠 작업실
+      <span id="badge-draft" class="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-700 text-slate-400 font-normal">0</span>
+    </button>
+    <button id="tab-published"
+      class="tab-btn px-5 py-3 text-sm font-semibold border-b-2 transition-colors flex items-center gap-2">
+      📌 게시판
+      <span id="badge-published" class="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-700 text-slate-400 font-normal">0</span>
+    </button>
   </div>
-  <h2 class="text-xl font-bold text-slate-200 mb-2">아직 프로젝트가 없습니다</h2>
-  <p class="text-slate-500 text-sm mb-6 max-w-sm">새 프로젝트를 만들어 팀과 프로세스를 공유하세요.</p>
-  <button onclick="document.getElementById('btn-new').click()"
-    class="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 rounded-xl text-sm font-semibold text-white transition-colors">
-    첫 프로젝트 만들기
-  </button>
 </div>
 
-<!-- ── Project grid ──────────────────────────────────────────── -->
+<!-- ── Main ───────────────────────────────────────────────────── -->
 <main class="max-w-6xl mx-auto px-6 py-8">
-  <div class="flex items-center justify-between mb-6">
-    <div>
-      <h1 class="text-lg font-bold text-slate-100">전체 프로젝트</h1>
-      <p id="project-subtitle" class="text-xs text-slate-500 mt-0.5">로딩 중...</p>
+
+  <!-- 탭 설명 -->
+  <div id="tab-desc" class="mb-6">
+    <div id="desc-draft" class="hidden">
+      <h1 class="text-lg font-bold text-slate-100">🛠 작업실</h1>
+      <p class="text-xs text-slate-500 mt-1">작업 중인 프로세스를 관리합니다. 완성되면 게시판으로 발행하세요.</p>
     </div>
-    <div class="flex items-center gap-2">
-      <input id="search" type="text" placeholder="프로젝트 검색..."
-        class="bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-300 placeholder-slate-500 outline-none focus:border-blue-500 w-44 transition-colors"/>
+    <div id="desc-published" class="hidden">
+      <h1 class="text-lg font-bold text-slate-100">📌 게시판</h1>
+      <p class="text-xs text-slate-500 mt-1">완성된 프로세스를 공유합니다. 편집하려면 작업실로 회수하세요.</p>
     </div>
   </div>
+
+  <!-- 검색 -->
+  <div class="flex items-center justify-between mb-5">
+    <p id="project-subtitle" class="text-xs text-slate-500"></p>
+    <input id="search" type="text" placeholder="프로젝트 검색..."
+      class="bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-300 placeholder-slate-500 outline-none focus:border-blue-500 w-44 transition-colors"/>
+  </div>
+
+  <!-- 빈 상태 -->
+  <div id="empty-draft" class="hidden flex-col items-center justify-center py-24 px-6 text-center">
+    <div class="w-14 h-14 rounded-2xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center mb-4 text-2xl">🛠</div>
+    <h2 class="text-lg font-bold text-slate-200 mb-2">작업실이 비어있습니다</h2>
+    <p class="text-slate-500 text-sm mb-5 max-w-xs">새 프로젝트를 만들거나 JSON 파일을 업로드하세요.</p>
+    <button onclick="document.getElementById('btn-new').click()"
+      class="px-5 py-2 bg-blue-600 hover:bg-blue-500 rounded-xl text-sm font-semibold text-white transition-colors">
+      첫 프로젝트 만들기
+    </button>
+  </div>
+  <div id="empty-published" class="hidden flex-col items-center justify-center py-24 px-6 text-center">
+    <div class="w-14 h-14 rounded-2xl bg-violet-600/20 border border-violet-500/30 flex items-center justify-center mb-4 text-2xl">📌</div>
+    <h2 class="text-lg font-bold text-slate-200 mb-2">아직 발행된 프로세스가 없습니다</h2>
+    <p class="text-slate-500 text-sm max-w-xs">작업실에서 프로세스를 완성한 뒤 게시판으로 발행하세요.</p>
+  </div>
+
+  <!-- 그리드 -->
   <div id="project-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"></div>
 </main>
 
@@ -63,7 +94,7 @@
   <div class="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-md">
     <div class="p-6 border-b border-slate-800">
       <h2 class="text-base font-bold text-slate-100">새 프로젝트 만들기</h2>
-      <p class="text-xs text-slate-500 mt-1">팀 프로세스도를 구성할 새 프로젝트를 생성합니다.</p>
+      <p class="text-xs text-slate-500 mt-1">작업실에 새 프로젝트가 추가됩니다.</p>
     </div>
     <div class="p-6 space-y-4">
       <div>
@@ -133,7 +164,7 @@
   </div>
 </div>
 
-<!-- ── Password Modal (for 수정 access) ───────────────────────── -->
+<!-- ── Password Modal ─────────────────────────────────────────── -->
 <div id="modal-pw" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[400] hidden items-center justify-center p-4">
   <div class="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-sm">
     <div class="p-6 border-b border-slate-800">
@@ -161,11 +192,51 @@
 <script src="db.js"></script>
 <script>
 'use strict';
-let allProjects = [];
+
+let allProjects  = [];
+let currentTab   = 'draft'; // 'draft' | 'published'
 let searchFilter = '';
+
+// ── Tab 전환 ──────────────────────────────────────────────────
+function setTab(tab) {
+  currentTab = tab;
+
+  // 탭 스타일
+  document.getElementById('tab-draft').classList.toggle(
+    'border-blue-500', tab === 'draft');
+  document.getElementById('tab-draft').classList.toggle(
+    'text-white', tab === 'draft');
+  document.getElementById('tab-draft').classList.toggle(
+    'border-transparent', tab !== 'draft');
+  document.getElementById('tab-draft').classList.toggle(
+    'text-slate-500', tab !== 'draft');
+
+  document.getElementById('tab-published').classList.toggle(
+    'border-violet-500', tab === 'published');
+  document.getElementById('tab-published').classList.toggle(
+    'text-white', tab === 'published');
+  document.getElementById('tab-published').classList.toggle(
+    'border-transparent', tab !== 'published');
+  document.getElementById('tab-published').classList.toggle(
+    'text-slate-500', tab !== 'published');
+
+  // 탭 설명
+  document.getElementById('desc-draft').classList.toggle('hidden', tab !== 'draft');
+  document.getElementById('desc-published').classList.toggle('hidden', tab !== 'published');
+
+  // 작업실에서만 새 프로젝트 / 업로드 버튼 표시
+  document.getElementById('nav-draft-actions').style.display =
+    tab === 'draft' ? 'flex' : 'none';
+
+  applyFilter();
+}
+
+document.getElementById('tab-draft').addEventListener('click',     () => setTab('draft'));
+document.getElementById('tab-published').addEventListener('click', () => setTab('published'));
 
 // ── Helpers ────────────────────────────────────────────────────
 function timeAgo(iso) {
+  if (!iso) return '';
   const d = (Date.now() - new Date(iso).getTime()) / 1000;
   if (d < 60)    return '방금 전';
   if (d < 3600)  return Math.floor(d/60) + '분 전';
@@ -189,16 +260,24 @@ function subjectBar(stats) {
 }
 
 function renderCard(p) {
-  const stats  = DB.getStats(p);
-  const colors = ['from-blue-600/20','from-purple-600/20','from-emerald-600/20','from-amber-600/20','from-rose-600/20'];
-  const color  = colors[parseInt(p.id.slice(-1), 16) % colors.length];
-  const lock   = p.passwordHash ? '<svg class="w-3 h-3 text-slate-500 inline-block" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>' : '';
+  const stats     = DB.getStats(p);
+  const isPublished = (p.status || 'draft') === 'published';
+  const colors    = ['from-blue-600/20','from-purple-600/20','from-emerald-600/20','from-amber-600/20','from-rose-600/20'];
+  const color     = colors[parseInt(p.id.slice(-1), 16) % colors.length];
+  const lock      = p.passwordHash ? '<svg class="w-3 h-3 text-slate-500 inline-block ml-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>' : '';
+  const statusBadge = isPublished
+    ? '<span class="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-900/60 text-emerald-400 border border-emerald-700/50 font-medium">발행됨</span>'
+    : '<span class="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-900/40 text-amber-400 border border-amber-700/40 font-medium">작업중</span>';
+
   return `
     <div class="group relative bg-slate-900 border border-slate-800 rounded-xl p-5 hover:border-slate-600 transition-all hover:shadow-xl hover:shadow-black/30 hover:-translate-y-0.5">
       <div class="absolute inset-0 rounded-xl bg-gradient-to-br ${color} to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"></div>
       <div class="relative">
         <div class="flex items-start justify-between mb-3">
-          <div class="w-9 h-9 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-lg">📋</div>
+          <div class="flex items-center gap-2">
+            <div class="w-9 h-9 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-lg">${isPublished ? '📌' : '📋'}</div>
+            ${statusBadge}
+          </div>
           <button onclick="event.stopPropagation(); deleteProject('${p.id}')"
             class="opacity-0 group-hover:opacity-100 w-7 h-7 rounded-lg bg-slate-800 hover:bg-red-600 flex items-center justify-center text-slate-400 hover:text-white transition-all"
             title="삭제">
@@ -238,35 +317,54 @@ function renderCard(p) {
     </div>`;
 }
 
-// ── Dashboard render ───────────────────────────────────────────
+// ── Render ─────────────────────────────────────────────────────
 function renderDashboard(projects) {
   allProjects = projects;
+
+  // 배지 숫자 업데이트
+  const draftCount     = projects.filter(p => (p.status||'draft') === 'draft').length;
+  const publishedCount = projects.filter(p => p.status === 'published').length;
+  document.getElementById('badge-draft').textContent     = draftCount;
+  document.getElementById('badge-published').textContent = publishedCount;
+
   applyFilter();
 }
 
 function applyFilter() {
   const f    = searchFilter.toLowerCase();
-  const list = f ? allProjects.filter(p =>
+  const tab  = currentTab;
+
+  // 현재 탭에 맞게 필터링
+  let list = allProjects.filter(p => (p.status||'draft') === tab);
+  if (f) list = list.filter(p =>
     p.name.toLowerCase().includes(f) || (p.owner||'').toLowerCase().includes(f)
-  ) : allProjects;
+  );
 
   const grid  = document.getElementById('project-grid');
-  const empty = document.getElementById('empty-state');
   const sub   = document.getElementById('project-subtitle');
 
-  sub.textContent = `총 ${allProjects.length}개 프로젝트`;
+  const tabCount = allProjects.filter(p => (p.status||'draft') === tab).length;
+  sub.textContent = `${tab === 'draft' ? '작업실' : '게시판'} ${tabCount}개`;
 
-  if (!allProjects.length) {
+  // 빈 상태 처리
+  document.getElementById('empty-draft').classList.add('hidden');
+  document.getElementById('empty-draft').classList.remove('flex');
+  document.getElementById('empty-published').classList.add('hidden');
+  document.getElementById('empty-published').classList.remove('flex');
+
+  if (!tabCount) {
     grid.innerHTML = '';
-    empty.classList.remove('hidden'); empty.classList.add('flex');
+    const emptyId = tab === 'draft' ? 'empty-draft' : 'empty-published';
+    document.getElementById(emptyId).classList.remove('hidden');
+    document.getElementById(emptyId).classList.add('flex');
     return;
   }
-  empty.classList.add('hidden'); empty.classList.remove('flex');
 
   if (!list.length) {
     grid.innerHTML = `<div class="col-span-full py-12 text-center text-slate-500 text-sm">"${escHtml(f)}" 검색 결과가 없습니다.</div>`;
     return;
   }
+
   grid.innerHTML = list.map(renderCard).join('');
 }
 
@@ -281,13 +379,10 @@ function viewProject(id) {
 }
 
 async function editProject(id, name) {
-  // If already authed in this session, go directly
   if (DB.isAuthed(id)) { location.href = `editor.html?id=${id}&mode=edit`; return; }
-  // Check if project has no password
   const p = await DB.getProject(id);
   if (!p) return;
   if (!p.passwordHash) { DB.setAuthed(id); location.href = `editor.html?id=${id}&mode=edit`; return; }
-  // Show password modal
   showPwModal(id, name);
 }
 
@@ -300,11 +395,11 @@ async function deleteProject(id) {
 
 // ── Password modal ─────────────────────────────────────────────
 let pwTargetId = null;
-const modalPw = document.getElementById('modal-pw');
+const modalPw  = document.getElementById('modal-pw');
 
 function showPwModal(id, name) {
   pwTargetId = id;
-  document.getElementById('modal-pw-name').textContent = `"${name}" 프로젝트 수정 권한이 필요합니다.`;
+  document.getElementById('modal-pw-name').textContent = `"${name}" 수정 권한이 필요합니다.`;
   document.getElementById('inp-pw').value = '';
   document.getElementById('pw-error').classList.add('hidden');
   modalPw.classList.remove('hidden'); modalPw.classList.add('flex');
@@ -365,7 +460,7 @@ document.getElementById('inp-name').addEventListener('keydown', e => {
   if (e.key === 'Enter') document.getElementById('inp-password').focus();
 });
 
-// ── Toast ─────────────────────────────────────────────────────
+// ── Toast ──────────────────────────────────────────────────────
 function showToast(msg) {
   const t = document.createElement('div');
   t.className = 'fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-800 border border-slate-700 text-slate-200 text-xs px-4 py-2.5 rounded-full shadow-lg z-[999] transition-opacity';
@@ -379,20 +474,17 @@ let uploadedCanvasData = null;
 const modalUpload = document.getElementById('modal-upload');
 const fileInput   = document.getElementById('inp-json-file');
 
-// ── Workflow JSON converter ────────────────────────────────────
-// Converts {nodes, edges, lanes, ...} format → {shapes, connections}
 function convertWorkflowJSON(data) {
   const SHAPE_TYPE = { rectangle:'rect', process:'rect', rect:'rect',
                        diamond:'diamond', condition:'diamond',
                        terminator:'oval', oval:'oval', start:'oval', end:'oval' };
-  const CP_DIR = [[0,-1],[1,0],[0,1],[-1,0]]; // top right bottom left
-
+  const CP_DIR = [[0,-1],[1,0],[0,1],[-1,0]];
   function cpCoord(s, i) {
     return [[s.x+s.w*.5,s.y],[s.x+s.w,s.y+s.h*.5],[s.x+s.w*.5,s.y+s.h],[s.x,s.y+s.h*.5]][i];
   }
   function bestFromCp(fs, ts) {
-    const dx = (ts.x+ts.w/2)-(fs.x+fs.w/2), dy = (ts.y+ts.h/2)-(fs.y+fs.h/2);
-    const len = Math.hypot(dx,dy)||1;
+    const dx=(ts.x+ts.w/2)-(fs.x+fs.w/2), dy=(ts.y+ts.h/2)-(fs.y+fs.h/2);
+    const len=Math.hypot(dx,dy)||1;
     let best=2, max=-Infinity;
     CP_DIR.forEach(([nx,ny],i)=>{ const d=nx*dx/len+ny*dy/len; if(d>max){max=d;best=i;} });
     return best;
@@ -405,63 +497,34 @@ function convertWorkflowJSON(data) {
     CP_DIR.forEach(([nx,ny],i)=>{ const d=nx*dx/len+ny*dy/len; if(d>max){max=d;best=i;} });
     return best;
   }
-
-  // Scale positions: keep original pt values (they're already pixel-sized)
-  const OFFSET_X = 60, OFFSET_Y = 60;
+  const OFFSET_X=60, OFFSET_Y=60;
   const shapes = (data.nodes||[]).map(n => ({
-    id:      n.id,
-    type:    SHAPE_TYPE[n.shape] || 'rect',
-    x:       Math.round((n.position?.x ?? 0) + OFFSET_X),
-    y:       Math.round((n.position?.y ?? 0) + OFFSET_Y),
-    w:       Math.round(n.size?.w ?? 120),
-    h:       Math.max(Math.round(n.size?.h ?? 40), 36),
-    text:    (n.label || '').replace(/\\n/g,'\n').trim(),
-    subject: null
+    id: n.id, type: SHAPE_TYPE[n.shape]||'rect',
+    x: Math.round((n.position?.x??0)+OFFSET_X), y: Math.round((n.position?.y??0)+OFFSET_Y),
+    w: Math.round(n.size?.w??120), h: Math.max(Math.round(n.size?.h??40),36),
+    text: (n.label||'').replace(/\\n/g,'\n').trim(), subject: null
   }));
-
   const shapeById = Object.fromEntries(shapes.map(s=>[s.id,s]));
-
-  // Track outgoing connection count per diamond to auto-assign Y/N
   const diamondOutCount = {};
-
   const connections = (data.edges||[]).map(e => {
-    const fs = shapeById[e.from], ts = shapeById[e.to];
-    if (!fs||!ts) return null;
-    const fromPtIdx = bestFromCp(fs, ts);
-    const toPtIdx   = bestToCp(fs, fromPtIdx, ts);
-
-    // Y/N label logic: if source is diamond assign Y/N by edge label or order
-    let label = null;
-    if (fs.type === 'diamond') {
-      const lup = (e.label||'').toUpperCase();
-      if      (lup === 'Y' || lup.endsWith(' Y') || lup === '사용 가능' || lup === '채용 Y') label = 'Y';
-      else if (lup === 'N' || lup === '-' || lup === 'N(BLOCK)') label = 'N';
-      else {
-        // fall back to order: first out = Y, second = N
-        diamondOutCount[e.from] = (diamondOutCount[e.from]||0) + 1;
-        label = diamondOutCount[e.from] === 1 ? 'Y' : 'N';
-      }
+    const fs=shapeById[e.from], ts=shapeById[e.to]; if(!fs||!ts) return null;
+    const fromPtIdx=bestFromCp(fs,ts), toPtIdx=bestToCp(fs,fromPtIdx,ts);
+    let label=null;
+    if (fs.type==='diamond') {
+      const lup=(e.label||'').toUpperCase();
+      if      (lup==='Y'||lup.endsWith(' Y')||lup==='사용 가능'||lup==='채용 Y') label='Y';
+      else if (lup==='N'||lup==='-'||lup==='N(BLOCK)') label='N';
+      else { diamondOutCount[e.from]=(diamondOutCount[e.from]||0)+1; label=diamondOutCount[e.from]===1?'Y':'N'; }
     }
-    return { id: e.id, fromId: e.from, toId: e.to, fromPtIdx, toPtIdx, label };
+    return {id:e.id, fromId:e.from, toId:e.to, fromPtIdx, toPtIdx, label};
   }).filter(Boolean);
-
-  return { shapes, connections };
+  return {shapes, connections};
 }
 
-// ── Parse any supported JSON format ───────────────────────────
 function parseCanvasJSON(data) {
-  // Native app format
-  if (Array.isArray(data.shapes) && !data.nodes) {
-    return { shapes: data.shapes, connections: data.connections || [] };
-  }
-  // Full export format {project, shapes, connections, analysis}
-  if (Array.isArray(data.shapes) && data.project) {
-    return { shapes: data.shapes, connections: data.connections || [] };
-  }
-  // Workflow / swim-lane format {nodes, edges, ...}
-  if (Array.isArray(data.nodes)) {
-    return convertWorkflowJSON(data);
-  }
+  if (Array.isArray(data.shapes) && !data.nodes) return {shapes:data.shapes, connections:data.connections||[]};
+  if (Array.isArray(data.shapes) && data.project)  return {shapes:data.shapes, connections:data.connections||[]};
+  if (Array.isArray(data.nodes)) return convertWorkflowJSON(data);
   return null;
 }
 
@@ -470,8 +533,7 @@ document.getElementById('btn-upload-json').addEventListener('click', () => {
 });
 
 fileInput.addEventListener('change', () => {
-  const file = fileInput.files[0];
-  if (!file) return;
+  const file = fileInput.files[0]; if (!file) return;
   const reader = new FileReader();
   reader.onload = e => {
     try {
@@ -479,20 +541,17 @@ fileInput.addEventListener('change', () => {
       const canvas = parseCanvasJSON(raw);
       if (!canvas) { showToast('지원하지 않는 JSON 형식입니다.'); return; }
       uploadedCanvasData = canvas;
-      const shapeCount = canvas.shapes.length, connCount = canvas.connections.length;
+      const shapeCount=canvas.shapes.length, connCount=canvas.connections.length;
       document.getElementById('upload-filename').textContent =
         `📎 ${file.name}  (도형 ${shapeCount}개, 연결 ${connCount}개)`;
-      // Pre-fill project info from metadata if available
-      const meta = raw.project || raw.metadata || {};
-      document.getElementById('ul-name').value     = meta.name || meta.title || file.name.replace('.json','');
-      document.getElementById('ul-desc').value     = meta.description || '';
-      document.getElementById('ul-owner').value    = meta.owner || '';
+      const meta = raw.project||raw.metadata||{};
+      document.getElementById('ul-name').value     = meta.name||meta.title||file.name.replace('.json','');
+      document.getElementById('ul-desc').value     = meta.description||'';
+      document.getElementById('ul-owner').value    = meta.owner||'';
       document.getElementById('ul-password').value = '';
       modalUpload.classList.remove('hidden'); modalUpload.classList.add('flex');
       setTimeout(() => document.getElementById('ul-name').focus(), 50);
-    } catch(err) {
-      showToast('JSON 파일을 읽을 수 없습니다: ' + err.message);
-    }
+    } catch(err) { showToast('JSON 파일을 읽을 수 없습니다: ' + err.message); }
   };
   reader.readAsText(file);
 });
@@ -507,7 +566,6 @@ document.getElementById('btn-confirm-upload').addEventListener('click', async ()
   if (!name) { document.getElementById('ul-name').focus(); return; }
   const password = document.getElementById('ul-password').value;
   if (!password) { document.getElementById('ul-password').focus(); return; }
-
   const btn = document.getElementById('btn-confirm-upload');
   btn.disabled = true; btn.textContent = '생성 중...';
   try {
@@ -528,7 +586,8 @@ document.getElementById('btn-confirm-upload').addEventListener('click', async ()
   }
 });
 
-// ── Boot: real-time subscription ──────────────────────────────
+// ── Boot ───────────────────────────────────────────────────────
+setTab('draft');
 DB.subscribeProjects(renderDashboard);
 </script>
 </body>

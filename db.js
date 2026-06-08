@@ -2,6 +2,10 @@
 // ════════════════════════════════════════════════════════════════
 //  db.js  –  Shared storage via Firebase Firestore
 //  Requires: firebase-config.js + Firebase compat SDK loaded first
+//
+//  프로젝트 상태
+//    status = 'draft'     → 작업실 (기본값, 생성 직후)
+//    status = 'published' → 게시판 (발행 후)
 // ════════════════════════════════════════════════════════════════
 
 const DB = (() => {
@@ -20,10 +24,35 @@ const DB = (() => {
   function isAuthed(id)  { return sessionStorage.getItem('auth_' + id) === '1'; }
   function setAuthed(id) { sessionStorage.setItem('auth_' + id, '1'); }
 
+  // ── Firestore-safe shape serialiser (removes undefined) ───────
+  function serializeShape(s) {
+    const out = {
+      id: s.id, type: s.type,
+      x: Math.round(s.x), y: Math.round(s.y),
+      w: s.w, h: s.h,
+      text:    s.text    || '',
+      subject: s.subject || null
+    };
+    if (s.bold)     out.bold     = s.bold;
+    if (s.fontSize) out.fontSize = s.fontSize;
+    return out;
+  }
+
+  function serializeConn(c) {
+    return {
+      id: c.id, fromId: c.fromId, toId: c.toId,
+      fromPtIdx: c.fromPtIdx, toPtIdx: c.toPtIdx,
+      label: c.label || ''
+    };
+  }
+
   // ── CRUD ──────────────────────────────────────────────────────
-  async function listProjects() {
-    const snap = await col.orderBy('updatedAt', 'desc').get();
-    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  async function listProjects(status = null) {
+    let q = col.orderBy('updatedAt', 'desc');
+    const snap = await q.get();
+    const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    if (!status) return all;
+    return all.filter(p => (p.status || 'draft') === status);
   }
 
   async function getProject(id) {
@@ -33,11 +62,12 @@ const DB = (() => {
   }
 
   async function createProject({ name, description = '', owner = '', password = '' }) {
-    const id          = crypto.randomUUID();
+    const id           = crypto.randomUUID();
     const passwordHash = await hashPw(password);
-    const now         = new Date().toISOString();
+    const now          = new Date().toISOString();
     const data = {
       name, description, owner, passwordHash,
+      status: 'draft',           // 작업실에서 시작
       createdAt: now, updatedAt: now,
       shapeCount: 0, shapes: [], connections: []
     };
@@ -48,10 +78,24 @@ const DB = (() => {
 
   async function saveCanvas(id, { shapes, connections }) {
     await col.doc(id).update({
-      shapes, connections,
-      shapeCount: shapes.length,
-      updatedAt: new Date().toISOString()
+      shapes:      shapes.map(serializeShape),
+      connections: connections.map(serializeConn),
+      shapeCount:  shapes.length,
+      updatedAt:   new Date().toISOString()
     });
+  }
+
+  // 작업실 → 게시판으로 발행
+  async function publishProject(id) {
+    await col.doc(id).update({
+      status:    'published',
+      publishedAt: new Date().toISOString()
+    });
+  }
+
+  // 게시판 → 작업실로 회수
+  async function unpublishProject(id) {
+    await col.doc(id).update({ status: 'draft' });
   }
 
   async function loadCanvas(id) {
@@ -69,7 +113,7 @@ const DB = (() => {
   async function verifyPassword(id, pw) {
     const p = await getProject(id);
     if (!p) return false;
-    if (!p.passwordHash) { setAuthed(id); return true; } // no password = open
+    if (!p.passwordHash) { setAuthed(id); return true; }
     const hash = await hashPw(pw);
     const ok   = hash === p.passwordHash;
     if (ok) setAuthed(id);
@@ -83,16 +127,18 @@ const DB = (() => {
     return { total: shapes.length, human, ai, unassigned: shapes.length - human - ai };
   }
 
-  // Real-time listener for project list; returns unsubscribe function
-  function subscribeProjects(callback) {
+  // Real-time listener; returns unsubscribe function
+  function subscribeProjects(callback, status = null) {
     return col.orderBy('updatedAt', 'desc').onSnapshot(snap => {
-      callback(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      callback(status ? all.filter(p => (p.status || 'draft') === status) : all);
     });
   }
 
   return {
     listProjects, getProject, createProject,
     saveCanvas, loadCanvas, deleteProject,
+    publishProject, unpublishProject,
     verifyPassword, getStats,
     isAuthed, setAuthed,
     subscribeProjects
