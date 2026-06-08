@@ -36,9 +36,11 @@ const DB = (() => {
     if (s.bold)      out.bold      = s.bold;
     if (s.fontSize)  out.fontSize  = s.fontSize;
     if (s.textColor) out.textColor = s.textColor;
-    if (s.type === 'highlight') {
-      out.strokeColor = s.strokeColor || '#3b82f6';
-      out.strokeWidth = s.strokeWidth || 2;
+    if (s.type === 'highlight' || s.type === 'text') {
+      const defStroke = s.type === 'text' ? '#94a3b8' : '#3b82f6';
+      const defWidth  = s.type === 'text' ? 1 : 2;
+      out.strokeColor = s.strokeColor || defStroke;
+      out.strokeWidth = s.strokeWidth || defWidth;
       out.dashType    = s.dashType    || 'dashed';
       out.glow        = s.glow        || false;
       if (s.fillColor) out.fillColor  = s.fillColor;

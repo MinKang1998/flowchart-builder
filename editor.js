@@ -46,8 +46,10 @@ function snapshot() {
       if (s.bold)      o.bold      = s.bold;
       if (s.fontSize)  o.fontSize  = s.fontSize;
       if (s.textColor) o.textColor = s.textColor;
-      if (s.type==='highlight') {
-        o.strokeColor = s.strokeColor||'#3b82f6'; o.strokeWidth = s.strokeWidth||2;
+      if (s.type==='highlight' || s.type==='text') {
+        const defStroke = s.type==='text' ? '#94a3b8' : '#3b82f6';
+        const defWidth  = s.type==='text' ? 1 : 2;
+        o.strokeColor = s.strokeColor||defStroke; o.strokeWidth = s.strokeWidth||defWidth;
         o.dashType = s.dashType||'dashed'; o.glow = s.glow||false;
         if (s.fillColor) o.fillColor = s.fillColor;
       }
@@ -314,8 +316,9 @@ function createShape(type, x, y, text='', subject=null) {
   const id = 's' + nextId++;
   const {w,h} = DEFAULTS[type];
   const shape = {id, type, x, y, w, h, text, subject, bold:false, fontSize:null, textColor:null};
-  if (type === 'highlight') {
-    shape.strokeColor = '#3b82f6'; shape.strokeWidth = 2;
+  if (type === 'highlight' || type === 'text') {
+    shape.strokeColor = type === 'text' ? '#94a3b8' : '#3b82f6';
+    shape.strokeWidth = type === 'text' ? 1 : 2;
     shape.dashType = 'dashed'; shape.fillColor = null; shape.glow = false;
   }
   shapes.push(shape);
@@ -331,12 +334,19 @@ function renderShape(shape) {
 
   let body;
   if (shape.type==='highlight') {
+    // 올가미: hit-bg 넓은 여유 영역
+    const HP=10;
+    const hitBg=mkSvg('rect',{x:shape.x-HP,y:shape.y-HP,width:shape.w+HP*2,height:shape.h+HP*2,rx:10,ry:10});
+    hitBg.style.cssText='fill:transparent;stroke:none;pointer-events:all;';
+    hitBg.classList.add('shape-hit-bg');
+    g.appendChild(hitBg);
     body = mkSvg('rect',{rx:8,ry:8,x:shape.x,y:shape.y,width:shape.w,height:shape.h});
     body.classList.add('shape-body','shape-highlight');
-    applyHighlightStyle(body, shape);
+    applyBorderStyle(body, shape);
   } else if (shape.type==='text') {
     body = mkSvg('rect',{rx:4,ry:4,x:shape.x,y:shape.y,width:shape.w,height:shape.h});
     body.classList.add('shape-body','shape-text');
+    applyBorderStyle(body, shape);
   } else if (shape.type==='rect') {
     body = mkSvg('rect',{rx:6,ry:6,x:shape.x,y:shape.y,width:shape.w,height:shape.h});
     body.classList.add('shape-body','shape-rect');
@@ -347,15 +357,6 @@ function renderShape(shape) {
     body = mkSvg('ellipse',{cx:shape.x+shape.w/2,cy:shape.y+shape.h/2,rx:shape.w/2,ry:shape.h/2});
     body.classList.add('shape-body','shape-oval');
   }
-  // ── 보이지 않는 넉넉한 hit 영역 (선택·우클릭 편의) ────────────
-  const HP = 10; // hit padding px
-  const hitBg = mkSvg('rect',{
-    x:shape.x-HP, y:shape.y-HP,
-    width:shape.w+HP*2, height:shape.h+HP*2, rx:10, ry:10
-  });
-  hitBg.style.cssText='fill:transparent;stroke:none;pointer-events:all;';
-  hitBg.classList.add('shape-hit-bg');
-  g.insertBefore(hitBg, g.firstChild); // 가장 아래 레이어 (이벤트만, 시각 없음)
   g.appendChild(body);
 
   const foX = shape.type==='highlight' ? shape.x+10 : shape.x+4;
@@ -380,19 +381,10 @@ function renderShape(shape) {
 
   if (shape.type !== 'text' && shape.type !== 'highlight') {
     [[.5,0],[1,.5],[.5,1],[0,.5]].forEach(([rx,ry],i) => {
-      const CX=shape.x+shape.w*rx, CY=shape.y+shape.h*ry;
-      // 투명 hit 원 (이벤트 전용, 시각 없음) — 넓은 클릭 영역
-      const cpHit=mkSvg('circle',{cx:CX,cy:CY,r:18});
-      cpHit.style.cssText='fill:transparent;stroke:none;cursor:crosshair;pointer-events:all;';
-      cpHit.classList.add('cp-hit');
-      cpHit.dataset.shapeId=shape.id; cpHit.dataset.ptIdx=i;
-      g.appendChild(cpHit); wireCp(cpHit,shape,i);
-      // 시각 원 (포인터 이벤트 없음, cpHit이 처리)
-      const cp=mkSvg('circle',{cx:CX,cy:CY,r:6});
+      const cp=mkSvg('circle',{cx:shape.x+shape.w*rx,cy:shape.y+shape.h*ry,r:6});
       cp.classList.add('connect-point');
       cp.dataset.shapeId=shape.id; cp.dataset.ptIdx=i;
-      cp.style.pointerEvents='none';
-      g.appendChild(cp);
+      g.appendChild(cp); wireCp(cp,shape,i);
     });
   }
 
@@ -423,7 +415,7 @@ function subjEmoji(s) { return s==='human'?'👤':s==='ai'?'🤖':''; }
 function applySubjClass(g,s) { g.classList.remove('subject-human','subject-ai'); if(s==='human')g.classList.add('subject-human'); if(s==='ai')g.classList.add('subject-ai'); }
 
 const DASH_MAP = { solid:'none', dashed:'10 5', dotted:'2 6', dashdot:'10 4 2 4' };
-function applyHighlightStyle(el, shape) {
+function applyBorderStyle(el, shape) {
   el.setAttribute('stroke',         shape.strokeColor || '#3b82f6');
   el.setAttribute('stroke-width',   shape.strokeWidth || 2);
   el.setAttribute('stroke-dasharray', DASH_MAP[shape.dashType||'dashed'] || '10 5');
@@ -448,7 +440,7 @@ function syncShapeDOM(shape) {
   if(shape.type==='highlight'||shape.type==='text'||shape.type==='rect'){
     body.setAttribute('x',shape.x); body.setAttribute('y',shape.y);
     body.setAttribute('width',shape.w); body.setAttribute('height',shape.h);
-    if(shape.type==='highlight') applyHighlightStyle(body, shape);
+    if(shape.type==='highlight') applyBorderStyle(body, shape);
   } else if(shape.type==='diamond'){ body.setAttribute('points',dpts(shape)); }
   else { body.setAttribute('cx',shape.x+shape.w/2); body.setAttribute('cy',shape.y+shape.h/2); }
 
@@ -461,6 +453,9 @@ function syncShapeDOM(shape) {
     fo.setAttribute('width',shape.w-8); fo.setAttribute('height',shape.h-8);
   }
 
+  // 올가미/텍스트 테두리 스타일 재적용
+  if (shape.type==='highlight'||shape.type==='text') applyBorderStyle(body, shape);
+
   if (shape.labelDiv) {
     const fs = shape.fontSize || (shape.type==='text'||shape.type==='highlight' ? 14 : 12);
     const fw = shape.bold ? '700' : (shape.type==='text' ? '400' : '600');
@@ -470,14 +465,11 @@ function syncShapeDOM(shape) {
     shape.labelDiv.style.color      = fc;
   }
   shape.badge.setAttribute('x',shape.x+shape.w-5); shape.badge.setAttribute('y',shape.y+13);
-  // connect-point + cp-hit 동기화
-  g.querySelectorAll('.connect-point,.cp-hit').forEach(el=>{
-    const i=parseInt(el.dataset.ptIdx); if(isNaN(i)) return;
-    const[cx,cy]=cpCoord(shape,i); el.setAttribute('cx',cx); el.setAttribute('cy',cy);
-  });
-  // hit-bg 동기화
+  // connect-point 동기화 (노드 전용)
+  g.querySelectorAll('.connect-point').forEach((cp,i)=>{ const[cx,cy]=cpCoord(shape,i); cp.setAttribute('cx',cx); cp.setAttribute('cy',cy); });
+  // 올가미 hit-bg 동기화
   const hitBg=g.querySelector('.shape-hit-bg');
-  if(hitBg){ const HP=10; hitBg.setAttribute('x',shape.x-HP); hitBg.setAttribute('y',shape.y-HP); hitBg.setAttribute('width',shape.w+HP*2); hitBg.setAttribute('height',shape.h+HP*2); }
+  if(hitBg&&shape.type==='highlight'){ const HP=10; hitBg.setAttribute('x',shape.x-HP); hitBg.setAttribute('y',shape.y-HP); hitBg.setAttribute('width',shape.w+HP*2); hitBg.setAttribute('height',shape.h+HP*2); }
   const rh=g.querySelector('.resize-handle');
   if(rh){ rh.setAttribute('x',shape.x+shape.w-7); rh.setAttribute('y',shape.y+shape.h-7); }
   connections.forEach(c=>{ if(c.fromId===shape.id||c.toId===shape.id) syncConnDOM(c); });
@@ -492,7 +484,7 @@ function wireShapeEvents(g, shape) {
 
   g.addEventListener('mousedown', e => {
     if (panActive || spaceDown || lassoActive) return;
-    if (e.target.classList.contains('connect-point') || e.target.classList.contains('cp-hit') || e.target.classList.contains('shape-hit-bg')) return;
+    if (e.target.classList.contains('connect-point')) return;
     if (e.button !== 0) return;
     e.stopPropagation();
     closeCtx();
@@ -554,7 +546,7 @@ function wireShapeEvents(g, shape) {
   });
 
   g.addEventListener('dblclick', e => {
-    if (e.target.classList.contains('connect-point') || e.target.classList.contains('cp-hit') || e.target.classList.contains('shape-hit-bg')) return;
+    if (e.target.classList.contains('connect-point')) return;
     openTextEditor(shape);
   });
 
@@ -859,6 +851,8 @@ function syncConnDOM(conn) {
 function openCtx(cx,cy,shape) {
   ctxTargetId = shape.id;
   const isHighlight = shape.type === 'highlight';
+  const isText      = shape.type === 'text';
+  const isBorderShape = isHighlight || isText;
   const isShape     = ['rect','diamond','oval'].includes(shape.type);
 
   document.getElementById('ctx-shape-name').textContent =
@@ -866,7 +860,7 @@ function openCtx(cx,cy,shape) {
 
   // 섹션 show/hide
   document.getElementById('ctx-subject-section').classList.toggle('hidden', !isShape);
-  document.getElementById('ctx-highlight-section').classList.toggle('hidden', !isHighlight);
+  document.getElementById('ctx-highlight-section').classList.toggle('hidden', !isBorderShape);
 
   // 수행 주체
   if (isShape) {
@@ -875,22 +869,23 @@ function openCtx(cx,cy,shape) {
   }
 
   // 텍스트 서식
-  const fs = shape.fontSize || (shape.type==='text'||isHighlight ? 14 : 12);
+  const fs = shape.fontSize || (isBorderShape ? 14 : 12);
   document.getElementById('ctx-font-size').textContent = fs;
   document.getElementById('ctx-bold').style.background = shape.bold ? '#e0e7ff' : '';
   document.getElementById('ctx-text-color').value = shape.textColor ||
     (isHighlight ? (shape.strokeColor||'#3b82f6') : '#1e293b');
 
-  // 올가미 스타일
-  if (isHighlight) {
-    document.getElementById('ctx-stroke-color').value = shape.strokeColor || '#3b82f6';
-    document.getElementById('ctx-fill-color').value   = shape.fillColor   || '#3b82f6';
-    document.getElementById('ctx-sw-val').textContent = shape.strokeWidth || 2;
+  // 올가미/텍스트 테두리 스타일
+  if (isBorderShape) {
+    const defStroke = isText ? '#94a3b8' : '#3b82f6';
+    document.getElementById('ctx-stroke-color').value = shape.strokeColor || defStroke;
+    document.getElementById('ctx-fill-color').value   = shape.fillColor   || defStroke;
+    document.getElementById('ctx-sw-val').textContent = shape.strokeWidth || (isText ? 1 : 2);
     document.getElementById('ctx-glow-toggle').classList.toggle('active', !!shape.glow);
     updateDashButtons(shape.dashType || 'dashed');
   }
 
-  const vw=window.innerWidth, vh=window.innerHeight, mw=256, mh=isHighlight?480:360;
+  const vw=window.innerWidth, vh=window.innerHeight, mw=256, mh=isBorderShape?480:360;
   ctxMenu.style.left = (cx+mw>vw ? cx-mw : cx) + 'px';
   ctxMenu.style.top  = (cy+mh>vh ? cy-mh : cy) + 'px';
   ctxMenu.classList.remove('hidden');

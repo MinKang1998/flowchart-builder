@@ -53,16 +53,11 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; }
 .shape-group.selected.subject-human .shape-body { stroke: #1d4ed8 !important; }
 .shape-group.selected.subject-ai    .shape-body { stroke: #6d28d9 !important; }
 
-/* Text box shape */
+/* Text box shape — border is controlled via inline styles from applyBorderStyle */
 .shape-text {
   fill: transparent;
-  stroke: transparent;
-  stroke-width: 1;
-  stroke-dasharray: 4 3;
-  transition: stroke .12s;
+  transition: opacity .12s;
 }
-.shape-group:hover .shape-text,
-.shape-group.selected .shape-text { stroke: #94a3b8; }
 
 /* Resize handle */
 .resize-handle {
@@ -109,11 +104,9 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; }
   stroke-width: 2;
   r: 5;
   opacity: 0;
+  cursor: crosshair;
   transition: opacity .12s, r .12s, fill .1s;
-  pointer-events: none; /* hit은 cp-hit이 담당 */
 }
-/* cp-hit hover 시 시각 CP 표시 */
-.cp-hit { cursor: crosshair; }
 .shape-group:hover .connect-point { opacity: 1 !important; }
 
 /* ── Connections ─────────────────────────────────────────────── */
