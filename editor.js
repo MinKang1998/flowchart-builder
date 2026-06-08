@@ -347,6 +347,15 @@ function renderShape(shape) {
     body = mkSvg('ellipse',{cx:shape.x+shape.w/2,cy:shape.y+shape.h/2,rx:shape.w/2,ry:shape.h/2});
     body.classList.add('shape-body','shape-oval');
   }
+  // ── 보이지 않는 넉넉한 hit 영역 (선택·우클릭 편의) ────────────
+  const HP = 10; // hit padding px
+  const hitBg = mkSvg('rect',{
+    x:shape.x-HP, y:shape.y-HP,
+    width:shape.w+HP*2, height:shape.h+HP*2, rx:10, ry:10
+  });
+  hitBg.style.cssText='fill:transparent;stroke:none;pointer-events:all;';
+  hitBg.classList.add('shape-hit-bg');
+  g.insertBefore(hitBg, g.firstChild); // 가장 아래 레이어 (이벤트만, 시각 없음)
   g.appendChild(body);
 
   const foX = shape.type==='highlight' ? shape.x+10 : shape.x+4;
@@ -371,10 +380,19 @@ function renderShape(shape) {
 
   if (shape.type !== 'text' && shape.type !== 'highlight') {
     [[.5,0],[1,.5],[.5,1],[0,.5]].forEach(([rx,ry],i) => {
-      const cp = mkSvg('circle',{cx:shape.x+shape.w*rx,cy:shape.y+shape.h*ry,r:6});
+      const CX=shape.x+shape.w*rx, CY=shape.y+shape.h*ry;
+      // 투명 hit 원 (이벤트 전용, 시각 없음) — 넓은 클릭 영역
+      const cpHit=mkSvg('circle',{cx:CX,cy:CY,r:18});
+      cpHit.style.cssText='fill:transparent;stroke:none;cursor:crosshair;pointer-events:all;';
+      cpHit.classList.add('cp-hit');
+      cpHit.dataset.shapeId=shape.id; cpHit.dataset.ptIdx=i;
+      g.appendChild(cpHit); wireCp(cpHit,shape,i);
+      // 시각 원 (포인터 이벤트 없음, cpHit이 처리)
+      const cp=mkSvg('circle',{cx:CX,cy:CY,r:6});
       cp.classList.add('connect-point');
       cp.dataset.shapeId=shape.id; cp.dataset.ptIdx=i;
-      g.appendChild(cp); wireCp(cp,shape,i);
+      cp.style.pointerEvents='none';
+      g.appendChild(cp);
     });
   }
 
@@ -452,7 +470,14 @@ function syncShapeDOM(shape) {
     shape.labelDiv.style.color      = fc;
   }
   shape.badge.setAttribute('x',shape.x+shape.w-5); shape.badge.setAttribute('y',shape.y+13);
-  g.querySelectorAll('.connect-point').forEach((cp,i)=>{ const[cx,cy]=cpCoord(shape,i); cp.setAttribute('cx',cx); cp.setAttribute('cy',cy); });
+  // connect-point + cp-hit 동기화
+  g.querySelectorAll('.connect-point,.cp-hit').forEach(el=>{
+    const i=parseInt(el.dataset.ptIdx); if(isNaN(i)) return;
+    const[cx,cy]=cpCoord(shape,i); el.setAttribute('cx',cx); el.setAttribute('cy',cy);
+  });
+  // hit-bg 동기화
+  const hitBg=g.querySelector('.shape-hit-bg');
+  if(hitBg){ const HP=10; hitBg.setAttribute('x',shape.x-HP); hitBg.setAttribute('y',shape.y-HP); hitBg.setAttribute('width',shape.w+HP*2); hitBg.setAttribute('height',shape.h+HP*2); }
   const rh=g.querySelector('.resize-handle');
   if(rh){ rh.setAttribute('x',shape.x+shape.w-7); rh.setAttribute('y',shape.y+shape.h-7); }
   connections.forEach(c=>{ if(c.fromId===shape.id||c.toId===shape.id) syncConnDOM(c); });
@@ -467,7 +492,7 @@ function wireShapeEvents(g, shape) {
 
   g.addEventListener('mousedown', e => {
     if (panActive || spaceDown || lassoActive) return;
-    if (e.target.classList.contains('connect-point')) return;
+    if (e.target.classList.contains('connect-point') || e.target.classList.contains('cp-hit') || e.target.classList.contains('shape-hit-bg')) return;
     if (e.button !== 0) return;
     e.stopPropagation();
     closeCtx();
@@ -529,7 +554,7 @@ function wireShapeEvents(g, shape) {
   });
 
   g.addEventListener('dblclick', e => {
-    if (e.target.classList.contains('connect-point')) return;
+    if (e.target.classList.contains('connect-point') || e.target.classList.contains('cp-hit') || e.target.classList.contains('shape-hit-bg')) return;
     openTextEditor(shape);
   });
 
@@ -636,6 +661,10 @@ textEditor.addEventListener('blur', ()=>closeTextEditor());
 // ════════════════════════════════════════════════════════════════
 //  Connect points
 // ════════════════════════════════════════════════════════════════
+// 스냅 반경: 캔버스 좌표 기준 px
+const CP_SNAP_R   = 44;  // CP 직접 스냅 반경
+const SHAPE_SNAP_R = 28; // 도형 경계 넘어서도 인식하는 여유
+
 function wireCp(cp, shape, ptIdx) {
   if (readOnly) return;
   cp.addEventListener('mousedown', e => {
@@ -644,27 +673,90 @@ function wireCp(cp, shape, ptIdx) {
     const line=mkSvg('line',{x1:fx,y1:fy,x2:fx,y2:fy});
     line.classList.add('temp-line'); tempLayer.appendChild(line);
 
+    let snapTarget=null;
+    let snapHighlight=null; // 현재 하이라이트된 CP 시각 요소
+
+    function clearSnapHL() {
+      if (snapHighlight) {
+        snapHighlight.setAttribute('r','6');
+        snapHighlight.style.fill='';
+        snapHighlight.style.opacity='';
+        snapHighlight = null;
+      }
+    }
+
     const onMove=ev=>{
       const {x:sx,y:sy}=svgOff(ev.clientX,ev.clientY);
-      const c=toCanvas(sx,sy); line.setAttribute('x2',c.x); line.setAttribute('y2',c.y);
+      const c=toCanvas(sx,sy);
+
+      // 가장 가까운 CP 탐색 (스냅 반경 내)
+      let bestD=CP_SNAP_R, newSnap=null;
+      shapes.forEach(s=>{
+        if(s.id===shape.id||s.type==='highlight'||s.type==='text') return;
+        for(let i=0;i<4;i++){
+          const[cx,cy]=cpCoord(s,i);
+          const d=Math.hypot(c.x-cx,c.y-cy);
+          if(d<bestD){ bestD=d; newSnap={shape:s,ptIdx:i,cx,cy}; }
+        }
+      });
+
+      // 스냅 대상 변경 시 하이라이트 업데이트
+      if(newSnap!==snapTarget){
+        clearSnapHL();
+        snapTarget=newSnap;
+        if(snapTarget){
+          // 대상 도형의 시각 CP 찾기
+          const cps=snapTarget.shape.el?.querySelectorAll('.connect-point');
+          if(cps&&cps[snapTarget.ptIdx]){
+            snapHighlight=cps[snapTarget.ptIdx];
+            snapHighlight.setAttribute('r','10');
+            snapHighlight.style.fill='#2563eb';
+            snapHighlight.style.opacity='1';
+          }
+        }
+      }
+
+      if(snapTarget){
+        line.setAttribute('x2',snapTarget.cx);
+        line.setAttribute('y2',snapTarget.cy);
+      } else {
+        line.setAttribute('x2',c.x);
+        line.setAttribute('y2',c.y);
+      }
     };
+
     const onUp=ev=>{
-      window.removeEventListener('mousemove',onMove); window.removeEventListener('mouseup',onUp);
+      window.removeEventListener('mousemove',onMove);
+      window.removeEventListener('mouseup',onUp);
+      clearSnapHL();
       line.remove();
+
+      if(snapTarget){
+        pushHistory();
+        createConnection(shape,ptIdx,snapTarget.shape,snapTarget.ptIdx);
+        return;
+      }
+      // 스냅 없으면 도형 경계 + 여유값으로 폴백
       const {x:sx,y:sy}=svgOff(ev.clientX,ev.clientY);
       const c=toCanvas(sx,sy);
-      const target=shapeAt(c.x,c.y);
-      if (target&&target.id!==shape.id) {
+      const target=shapeAtPadded(c.x,c.y,SHAPE_SNAP_R);
+      if(target&&target.id!==shape.id){
         pushHistory();
         createConnection(shape,ptIdx,target,smartTargetCp(shape,ptIdx,target));
       }
     };
-    window.addEventListener('mousemove',onMove); window.addEventListener('mouseup',onUp);
+    window.addEventListener('mousemove',onMove);
+    window.addEventListener('mouseup',onUp);
   });
 }
 
 function shapeAt(cx,cy) {
-  for (let i=shapes.length-1;i>=0;i--) { const s=shapes[i]; if(cx>=s.x&&cx<=s.x+s.w&&cy>=s.y&&cy<=s.y+s.h) return s; }
+  for(let i=shapes.length-1;i>=0;i--){const s=shapes[i];if(s.type==='highlight'||s.type==='text')continue;if(cx>=s.x&&cx<=s.x+s.w&&cy>=s.y&&cy<=s.y+s.h)return s;}
+  return null;
+}
+// 연결선 드롭 시 사용 — 도형 경계 밖 pad px까지 인식
+function shapeAtPadded(cx,cy,pad){
+  for(let i=shapes.length-1;i>=0;i--){const s=shapes[i];if(s.type==='highlight'||s.type==='text')continue;if(cx>=s.x-pad&&cx<=s.x+s.w+pad&&cy>=s.y-pad&&cy<=s.y+s.h+pad)return s;}
   return null;
 }
 function nearestCp(shape,cx,cy) {

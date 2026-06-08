@@ -109,10 +109,12 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; }
   stroke-width: 2;
   r: 5;
   opacity: 0;
-  cursor: crosshair;
-  transition: opacity .1s, r .1s;
+  transition: opacity .12s, r .12s, fill .1s;
+  pointer-events: none; /* hit은 cp-hit이 담당 */
 }
-.connect-point:hover { fill: #3b82f6; opacity: 1 !important; }
+/* cp-hit hover 시 시각 CP 표시 */
+.cp-hit { cursor: crosshair; }
+.shape-group:hover .connect-point { opacity: 1 !important; }
 
 /* ── Connections ─────────────────────────────────────────────── */
 .connection {
