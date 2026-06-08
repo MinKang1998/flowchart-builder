@@ -893,15 +893,44 @@ document.getElementById('btn-export-json').addEventListener('click',()=>{
   const a=Object.assign(document.createElement('a'),{href:URL.createObjectURL(blob),download:(meta.name||'flowchart')+'.json'}); a.click(); URL.revokeObjectURL(a.href);
 });
 
-document.getElementById('btn-export-png').addEventListener('click',()=>{
-  const ser=new XMLSerializer().serializeToString(svg);
-  const bb=svg.getBoundingClientRect();
-  const cvs=Object.assign(document.createElement('canvas'),{width:bb.width,height:bb.height});
-  const ctx=cvs.getContext('2d');
-  const blob=new Blob([ser],{type:'image/svg+xml;charset=utf-8'});
-  const url=URL.createObjectURL(blob); const img=new Image();
-  img.onload=()=>{ ctx.fillStyle='#f8fafc'; ctx.fillRect(0,0,cvs.width,cvs.height); ctx.drawImage(img,0,0); URL.revokeObjectURL(url); const meta=DB.getProject(projectId)||{}; const a=Object.assign(document.createElement('a'),{href:cvs.toDataURL('image/png'),download:(meta.name||'flowchart')+'.png'}); a.click(); };
-  img.src=url;
+document.getElementById('btn-export-pdf').addEventListener('click',()=>{
+  // Compute tight bounding box of all shapes in canvas coordinates
+  if (!shapes.length) return;
+  const PAD = 40;
+  const minX = Math.min(...shapes.map(s=>s.x)) - PAD;
+  const minY = Math.min(...shapes.map(s=>s.y)) - PAD;
+  const maxX = Math.max(...shapes.map(s=>s.x+s.w)) + PAD;
+  const maxY = Math.max(...shapes.map(s=>s.y+s.h)) + PAD;
+  const W = maxX - minX, H = maxY - minY;
+
+  // Clone SVG, reset viewport transform to show only content area
+  const clone = svg.cloneNode(true);
+  clone.setAttribute('width', W);
+  clone.setAttribute('height', H);
+  clone.setAttribute('viewBox', `${minX} ${minY} ${W} ${H}`);
+  clone.querySelector('#viewport')?.removeAttribute('transform');
+  // Remove UI-only elements
+  clone.querySelector('#tempLayer')?.remove();
+  clone.querySelectorAll('.connect-point').forEach(el=>el.remove());
+
+  const svgStr = new XMLSerializer().serializeToString(clone);
+  const meta = DB.getProject(projectId) || {};
+  const title = meta.name || 'flowchart';
+
+  const win = window.open('', '_blank');
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8">
+<title>${title}</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:#fff; display:flex; align-items:center; justify-content:center; min-height:100vh; }
+  svg { max-width:100%; height:auto; }
+  @media print {
+    body { min-height:unset; }
+    @page { margin:10mm; size:auto; }
+  }
+</style>
+</head><body>${svgStr}<script>window.onload=()=>{ window.print(); }<\/script></body></html>`);
+  win.document.close();
 });
 
 // ════════════════════════════════════════════════════════════════
