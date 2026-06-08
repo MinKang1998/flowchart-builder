@@ -42,7 +42,8 @@ function snapshot() {
   return JSON.stringify({
     shapes: shapes.map(s => ({
       id:s.id, type:s.type, x:Math.round(s.x), y:Math.round(s.y),
-      w:s.w, h:s.h, text:s.text, subject:s.subject
+      w:s.w, h:s.h, text:s.text, subject:s.subject,
+      bold:s.bold||undefined, fontSize:s.fontSize||undefined
     })),
     connections: connections.map(c => ({
       id:c.id, fromId:c.fromId, toId:c.toId,
@@ -278,7 +279,7 @@ function endLasso() {
 // ════════════════════════════════════════════════════════════════
 //  Shape defaults
 // ════════════════════════════════════════════════════════════════
-const DEFAULTS = { rect:{w:130,h:60}, diamond:{w:130,h:80}, oval:{w:130,h:54} };
+const DEFAULTS = { rect:{w:130,h:60}, diamond:{w:130,h:80}, oval:{w:130,h:54}, text:{w:160,h:48} };
 
 // ── Panel drag → drop ─────────────────────────────────────────
 let panelDragType = null;
@@ -304,7 +305,7 @@ svg.addEventListener('drop', e => {
 function createShape(type, x, y, text='', subject=null) {
   const id = 's' + nextId++;
   const {w,h} = DEFAULTS[type];
-  const shape = {id, type, x, y, w, h, text, subject};
+  const shape = {id, type, x, y, w, h, text, subject, bold:false, fontSize:null};
   shapes.push(shape);
   renderShape(shape);
   refreshTable(); scheduleSave();
@@ -317,7 +318,10 @@ function renderShape(shape) {
   g.dataset.id = shape.id;
 
   let body;
-  if (shape.type==='rect') {
+  if (shape.type==='text') {
+    body = mkSvg('rect',{rx:4,ry:4,x:shape.x,y:shape.y,width:shape.w,height:shape.h});
+    body.classList.add('shape-body','shape-text');
+  } else if (shape.type==='rect') {
     body = mkSvg('rect',{rx:6,ry:6,x:shape.x,y:shape.y,width:shape.w,height:shape.h});
     body.classList.add('shape-body','shape-rect');
   } else if (shape.type==='diamond') {
@@ -329,10 +333,12 @@ function renderShape(shape) {
   }
   g.appendChild(body);
 
-  const fo = mkSvg('foreignObject',{x:shape.x+5,y:shape.y+3,width:shape.w-10,height:shape.h-6});
+  const fo = mkSvg('foreignObject',{x:shape.x+4,y:shape.y+4,width:shape.w-8,height:shape.h-8});
   fo.style.overflow='visible'; fo.style.pointerEvents='none';
   const div = document.createElement('div');
-  div.style.cssText='width:100%;height:100%;display:flex;align-items:center;justify-content:center;text-align:center;font-size:12px;font-weight:600;color:#1e293b;font-family:inherit;word-break:break-word;line-height:1.25;pointer-events:none;user-select:none;';
+  const fs = shape.fontSize || (shape.type==='text' ? 14 : 12);
+  const fw = shape.bold ? '700' : (shape.type==='text' ? '400' : '600');
+  div.style.cssText=`width:100%;height:100%;display:flex;align-items:center;justify-content:center;text-align:center;font-size:${fs}px;font-weight:${fw};color:#1e293b;font-family:inherit;word-break:break-word;line-height:1.25;pointer-events:none;user-select:none;`;
   div.textContent = shape.text;
   fo.appendChild(div); g.appendChild(fo);
 
@@ -341,12 +347,21 @@ function renderShape(shape) {
   badge.textContent = subjEmoji(shape.subject);
   g.appendChild(badge);
 
-  [[.5,0],[1,.5],[.5,1],[0,.5]].forEach(([rx,ry],i) => {
-    const cp = mkSvg('circle',{cx:shape.x+shape.w*rx,cy:shape.y+shape.h*ry,r:6});
-    cp.classList.add('connect-point');
-    cp.dataset.shapeId=shape.id; cp.dataset.ptIdx=i;
-    g.appendChild(cp); wireCp(cp,shape,i);
-  });
+  if (shape.type !== 'text') {
+    [[.5,0],[1,.5],[.5,1],[0,.5]].forEach(([rx,ry],i) => {
+      const cp = mkSvg('circle',{cx:shape.x+shape.w*rx,cy:shape.y+shape.h*ry,r:6});
+      cp.classList.add('connect-point');
+      cp.dataset.shapeId=shape.id; cp.dataset.ptIdx=i;
+      g.appendChild(cp); wireCp(cp,shape,i);
+    });
+  }
+
+  if (shape.type === 'text') {
+    const rh = mkSvg('rect',{x:shape.x+shape.w-7,y:shape.y+shape.h-7,width:8,height:8,rx:2});
+    rh.classList.add('resize-handle');
+    g.appendChild(rh);
+    wireResizeHandle(rh, shape);
+  }
 
   applySubjClass(g, shape.subject);
   wireShapeEvents(g, shape);
@@ -367,12 +382,21 @@ function applySubjClass(g,s) { g.classList.remove('subject-human','subject-ai');
 
 function syncShapeDOM(shape) {
   const g=shape.el, body=g.querySelector('.shape-body'), fo=g.querySelector('foreignObject');
-  if(shape.type==='rect'){ body.setAttribute('x',shape.x); body.setAttribute('y',shape.y); }
+  if(shape.type==='text'||shape.type==='rect'){ body.setAttribute('x',shape.x); body.setAttribute('y',shape.y); body.setAttribute('width',shape.w); body.setAttribute('height',shape.h); }
   else if(shape.type==='diamond'){ body.setAttribute('points',dpts(shape)); }
   else { body.setAttribute('cx',shape.x+shape.w/2); body.setAttribute('cy',shape.y+shape.h/2); }
-  fo.setAttribute('x',shape.x+5); fo.setAttribute('y',shape.y+3);
+  fo.setAttribute('x',shape.x+4); fo.setAttribute('y',shape.y+4);
+  fo.setAttribute('width',shape.w-8); fo.setAttribute('height',shape.h-8);
+  if (shape.labelDiv) {
+    const fs = shape.fontSize || (shape.type==='text' ? 14 : 12);
+    const fw = shape.bold ? '700' : (shape.type==='text' ? '400' : '600');
+    shape.labelDiv.style.fontSize = fs+'px';
+    shape.labelDiv.style.fontWeight = fw;
+  }
   shape.badge.setAttribute('x',shape.x+shape.w-5); shape.badge.setAttribute('y',shape.y+13);
   g.querySelectorAll('.connect-point').forEach((cp,i)=>{ const[cx,cy]=cpCoord(shape,i); cp.setAttribute('cx',cx); cp.setAttribute('cy',cy); });
+  const rh=g.querySelector('.resize-handle');
+  if(rh){ rh.setAttribute('x',shape.x+shape.w-7); rh.setAttribute('y',shape.y+shape.h-7); }
   connections.forEach(c=>{ if(c.fromId===shape.id||c.toId===shape.id) syncConnDOM(c); });
 }
 
@@ -483,6 +507,36 @@ function selectConn(id) {
   clearSel();
   selectedIds.add(id);
   connections.find(c=>c.id===id)?.path?.classList.add('selected');
+}
+
+// ════════════════════════════════════════════════════════════════
+//  Resize handle (text box)
+// ════════════════════════════════════════════════════════════════
+function wireResizeHandle(handle, shape) {
+  if (readOnly) return;
+  handle.addEventListener('mousedown', e => {
+    if (e.button !== 0) return;
+    e.stopPropagation();
+    e.preventDefault();
+    const {x:sx0,y:sy0} = svgOff(e.clientX, e.clientY);
+    const c0 = toCanvas(sx0, sy0);
+    const origW = shape.w, origH = shape.h;
+    pushHistory();
+    const onMove = ev => {
+      const {x:sx,y:sy} = svgOff(ev.clientX, ev.clientY);
+      const c = toCanvas(sx, sy);
+      shape.w = Math.max(60, origW + (c.x - c0.x));
+      shape.h = Math.max(28, origH + (c.y - c0.y));
+      syncShapeDOM(shape);
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      scheduleSave();
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -657,7 +711,10 @@ function openCtx(cx,cy,shape) {
   document.getElementById('ctx-shape-name').textContent=(shape.text||'(텍스트 없음)')+' — '+typeLabel(shape.type);
   document.getElementById('ctx-human').classList.toggle('active',shape.subject==='human');
   document.getElementById('ctx-ai').classList.toggle('active',shape.subject==='ai');
-  const vw=window.innerWidth,vh=window.innerHeight,mw=210,mh=240;
+  const fs = shape.fontSize || (shape.type==='text' ? 14 : 12);
+  document.getElementById('ctx-font-size').textContent = fs;
+  document.getElementById('ctx-bold').style.background = shape.bold ? '#e0e7ff' : '';
+  const vw=window.innerWidth,vh=window.innerHeight,mw=210,mh=300;
   ctxMenu.style.left=(cx+mw>vw?cx-mw:cx)+'px'; ctxMenu.style.top=(cy+mh>vh?cy-mh:cy)+'px';
   ctxMenu.classList.remove('hidden');
 }
@@ -667,9 +724,12 @@ document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeCtx(); });
 
 function setSubject(subj) {
   if (!ctxTargetId) return;
-  const s=shapes.find(sh=>sh.id===ctxTargetId); if(!s) return;
   pushHistory();
-  s.subject=subj; s.badge.textContent=subjEmoji(subj); applySubjClass(s.el,subj);
+  const targets = new Set([ctxTargetId, ...selectedIds]);
+  targets.forEach(id => {
+    const s = shapes.find(sh=>sh.id===id); if(!s) return;
+    s.subject=subj; s.badge.textContent=subjEmoji(subj); applySubjClass(s.el,subj);
+  });
   closeCtx(); refreshTable(); scheduleSave();
 }
 document.getElementById('ctx-human').addEventListener('click',()=>setSubject('human'));
@@ -677,6 +737,31 @@ document.getElementById('ctx-ai').addEventListener('click',   ()=>setSubject('ai
 document.getElementById('ctx-clear').addEventListener('click',()=>setSubject(null));
 document.getElementById('ctx-edit').addEventListener('click', ()=>{ const s=shapes.find(sh=>sh.id===ctxTargetId); closeCtx(); if(s) openTextEditor(s); });
 document.getElementById('ctx-delete').addEventListener('click',()=>{ closeCtx(); deleteSelected(); });
+
+document.getElementById('ctx-bold').addEventListener('click', () => {
+  const s = shapes.find(sh=>sh.id===ctxTargetId); if (!s) return;
+  pushHistory();
+  s.bold = !s.bold;
+  syncShapeDOM(s);
+  document.getElementById('ctx-bold').style.background = s.bold ? '#e0e7ff' : '';
+  scheduleSave();
+});
+document.getElementById('ctx-font-dec').addEventListener('click', () => {
+  const s = shapes.find(sh=>sh.id===ctxTargetId); if (!s) return;
+  pushHistory();
+  s.fontSize = Math.max(8, (s.fontSize || (s.type==='text' ? 14 : 12)) - 1);
+  syncShapeDOM(s);
+  document.getElementById('ctx-font-size').textContent = s.fontSize;
+  scheduleSave();
+});
+document.getElementById('ctx-font-inc').addEventListener('click', () => {
+  const s = shapes.find(sh=>sh.id===ctxTargetId); if (!s) return;
+  pushHistory();
+  s.fontSize = Math.min(48, (s.fontSize || (s.type==='text' ? 14 : 12)) + 1);
+  syncShapeDOM(s);
+  document.getElementById('ctx-font-size').textContent = s.fontSize;
+  scheduleSave();
+});
 
 // ════════════════════════════════════════════════════════════════
 //  Delete
@@ -731,7 +816,7 @@ function copySelected() {
   const selShapeIds = new Set(selShapes.map(s=>s.id));
   const selConns = connections.filter(c=>selShapeIds.has(c.fromId)&&selShapeIds.has(c.toId));
   clipboard = {
-    shapes: selShapes.map(s=>({id:s.id,type:s.type,x:s.x,y:s.y,w:s.w,h:s.h,text:s.text,subject:s.subject})),
+    shapes: selShapes.map(s=>({id:s.id,type:s.type,x:s.x,y:s.y,w:s.w,h:s.h,text:s.text,subject:s.subject,bold:s.bold||undefined,fontSize:s.fontSize||undefined})),
     connections: selConns.map(c=>({id:c.id,fromId:c.fromId,toId:c.toId,fromPtIdx:c.fromPtIdx,toPtIdx:c.toPtIdx,label:c.label}))
   };
   showToast(`${selShapes.length}개 도형 복사됨  —  Ctrl+V로 붙여넣기`);
@@ -812,7 +897,7 @@ document.addEventListener('keydown', e => {
 // ════════════════════════════════════════════════════════════════
 //  Table
 // ════════════════════════════════════════════════════════════════
-function typeLabel(t){ return t==='rect'?'일반 프로세스':t==='diamond'?'의사결정':'시작/종료'; }
+function typeLabel(t){ return t==='rect'?'일반 프로세스':t==='diamond'?'의사결정':t==='text'?'텍스트 상자':'시작/종료'; }
 
 function getFollowups(shape) {
   const outs=connections.filter(c=>c.fromId===shape.id);
@@ -870,7 +955,7 @@ async function doSave() {
   if (!projectId || readOnly) return;
   try {
     await DB.saveCanvas(projectId, {
-      shapes:      shapes.map(s=>({id:s.id,type:s.type,x:Math.round(s.x),y:Math.round(s.y),w:s.w,h:s.h,text:s.text,subject:s.subject})),
+      shapes:      shapes.map(s=>({id:s.id,type:s.type,x:Math.round(s.x),y:Math.round(s.y),w:s.w,h:s.h,text:s.text,subject:s.subject,bold:s.bold||undefined,fontSize:s.fontSize||undefined})),
       connections: connections.map(c=>({id:c.id,fromId:c.fromId,toId:c.toId,fromPtIdx:c.fromPtIdx,toPtIdx:c.toPtIdx,label:c.label}))
     });
     setSaveStatus('saved');
@@ -898,7 +983,7 @@ document.getElementById('btn-share').addEventListener('click', async () => {
 document.getElementById('btn-export-json').addEventListener('click', async () => {
   await doSave();
   const meta = await DB.getProject(projectId) || {};
-  const blob = new Blob([JSON.stringify({project:meta,shapes:shapes.map(s=>({id:s.id,type:s.type,x:Math.round(s.x),y:Math.round(s.y),w:s.w,h:s.h,text:s.text,subject:s.subject})),connections:connections.map(c=>({id:c.id,fromId:c.fromId,toId:c.toId,fromPtIdx:c.fromPtIdx,toPtIdx:c.toPtIdx,label:c.label})),analysis:shapes.map((s,i)=>({seq:i+1,name:s.text||'(미입력)',type:typeLabel(s.type),subject:s.subject==='human'?'사람':s.subject==='ai'?'AI':'미지정',followups:connections.filter(c=>c.fromId===s.id).map(c=>({target:shapes.find(sh=>sh.id===c.toId)?.text||'?',label:c.label}))}))},null,2)],{type:'application/json'});
+  const blob = new Blob([JSON.stringify({project:meta,shapes:shapes.map(s=>({id:s.id,type:s.type,x:Math.round(s.x),y:Math.round(s.y),w:s.w,h:s.h,text:s.text,subject:s.subject,bold:s.bold||undefined,fontSize:s.fontSize||undefined})),connections:connections.map(c=>({id:c.id,fromId:c.fromId,toId:c.toId,fromPtIdx:c.fromPtIdx,toPtIdx:c.toPtIdx,label:c.label})),analysis:shapes.map((s,i)=>({seq:i+1,name:s.text||'(미입력)',type:typeLabel(s.type),subject:s.subject==='human'?'사람':s.subject==='ai'?'AI':'미지정',followups:connections.filter(c=>c.fromId===s.id).map(c=>({target:shapes.find(sh=>sh.id===c.toId)?.text||'?',label:c.label}))}))},null,2)],{type:'application/json'});
   const a=Object.assign(document.createElement('a'),{href:URL.createObjectURL(blob),download:(meta.name||'flowchart')+'.json'}); a.click(); URL.revokeObjectURL(a.href);
 });
 
@@ -934,7 +1019,7 @@ document.getElementById('sa-confirm').addEventListener('click', async () => {
       password
     });
     await DB.saveCanvas(newProject.id, {
-      shapes:      shapes.map(s=>({id:s.id,type:s.type,x:Math.round(s.x),y:Math.round(s.y),w:s.w,h:s.h,text:s.text,subject:s.subject})),
+      shapes:      shapes.map(s=>({id:s.id,type:s.type,x:Math.round(s.x),y:Math.round(s.y),w:s.w,h:s.h,text:s.text,subject:s.subject,bold:s.bold||undefined,fontSize:s.fontSize||undefined})),
       connections: connections.map(c=>({id:c.id,fromId:c.fromId,toId:c.toId,fromPtIdx:c.fromPtIdx,toPtIdx:c.toPtIdx,label:c.label}))
     });
     modalSaveAs.classList.add('hidden'); modalSaveAs.classList.remove('flex');
