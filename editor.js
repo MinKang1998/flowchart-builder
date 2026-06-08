@@ -1229,7 +1229,7 @@ document.getElementById('btn-export-json').addEventListener('click', async () =>
   const blob = new Blob([JSON.stringify({
     project: meta,
     shapes: safeShapes,
-    connections: connections.map(c=>({id:c.id,fromId:c.fromId,toId:c.toId,fromPtIdx:c.fromPtIdx,toPtIdx:c.toPtIdx,label:c.label||''})),
+    connections: connections.map(c=>({id:c.id,fromId:c.fromId,toId:c.toId,fromPtIdx:c.fromPtIdx,toPtIdx:c.toPtIdx,label:c.label!=null?c.label:null})),
     analysis: shapes.map((s,i)=>({seq:i+1,name:s.text||'(미입력)',type:typeLabel(s.type),subject:s.subject==='human'?'사람':s.subject==='ai'?'AI':'미지정',followups:connections.filter(c=>c.fromId===s.id).map(c=>({target:shapes.find(sh=>sh.id===c.toId)?.text||'?',label:c.label}))}))
   },null,2)],{type:'application/json'});
   const a=Object.assign(document.createElement('a'),{href:URL.createObjectURL(blob),download:(meta.name||'flowchart')+'.json'}); a.click(); URL.revokeObjectURL(a.href);

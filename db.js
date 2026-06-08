@@ -52,7 +52,7 @@ const DB = (() => {
     return {
       id: c.id, fromId: c.fromId, toId: c.toId,
       fromPtIdx: c.fromPtIdx, toPtIdx: c.toPtIdx,
-      label: c.label || ''
+      label: c.label != null ? c.label : null
     };
   }
 
@@ -112,7 +112,11 @@ const DB = (() => {
     const doc = await col.doc(id).get();
     if (!doc.exists) return { shapes: [], connections: [] };
     const d = doc.data();
-    return { shapes: d.shapes || [], connections: d.connections || [] };
+    // label이 '' (빈 문자열)로 잘못 저장된 경우 null로 복원
+    const conns = (d.connections || []).map(c => ({
+      ...c, label: (c.label === '' || c.label == null) ? null : c.label
+    }));
+    return { shapes: d.shapes || [], connections: conns };
   }
 
   async function deleteProject(id) {
