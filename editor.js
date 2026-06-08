@@ -894,7 +894,6 @@ document.getElementById('btn-export-json').addEventListener('click',()=>{
 });
 
 document.getElementById('btn-export-pdf').addEventListener('click',()=>{
-  // Compute tight bounding box of all shapes in canvas coordinates
   if (!shapes.length) return;
   const PAD = 40;
   const minX = Math.min(...shapes.map(s=>s.x)) - PAD;
@@ -903,34 +902,30 @@ document.getElementById('btn-export-pdf').addEventListener('click',()=>{
   const maxY = Math.max(...shapes.map(s=>s.y+s.h)) + PAD;
   const W = maxX - minX, H = maxY - minY;
 
-  // Clone SVG, reset viewport transform to show only content area
+  // Clone SVG fitted to content, strip UI-only elements
   const clone = svg.cloneNode(true);
-  clone.setAttribute('width', W);
-  clone.setAttribute('height', H);
+  clone.setAttribute('width', W); clone.setAttribute('height', H);
   clone.setAttribute('viewBox', `${minX} ${minY} ${W} ${H}`);
   clone.querySelector('#viewport')?.removeAttribute('transform');
-  // Remove UI-only elements
   clone.querySelector('#tempLayer')?.remove();
   clone.querySelectorAll('.connect-point').forEach(el=>el.remove());
 
-  const svgStr = new XMLSerializer().serializeToString(clone);
-  const meta = DB.getProject(projectId) || {};
-  const title = meta.name || 'flowchart';
-
-  const win = window.open('', '_blank');
-  win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8">
-<title>${title}</title>
-<style>
-  * { margin:0; padding:0; box-sizing:border-box; }
-  body { background:#fff; display:flex; align-items:center; justify-content:center; min-height:100vh; }
-  svg { max-width:100%; height:auto; }
-  @media print {
-    body { min-height:unset; }
-    @page { margin:10mm; size:auto; }
-  }
-</style>
-</head><body>${svgStr}<script>window.onload=()=>{ window.print(); }<\/script></body></html>`);
-  win.document.close();
+  const blob = new Blob([new XMLSerializer().serializeToString(clone)],{type:'image/svg+xml;charset=utf-8'});
+  const url = URL.createObjectURL(blob);
+  const img = new Image();
+  img.onload = () => {
+    // Render at 2× for crisp output
+    const cvs = Object.assign(document.createElement('canvas'),{width:W*2,height:H*2});
+    const ctx = cvs.getContext('2d');
+    ctx.scale(2,2); ctx.fillStyle='#f8fafc'; ctx.fillRect(0,0,W,H); ctx.drawImage(img,0,0);
+    URL.revokeObjectURL(url);
+    const meta = DB.getProject(projectId)||{};
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({ orientation: W>H?'l':'p', unit:'px', format:[W,H], hotfixes:['px_scaling'] });
+    pdf.addImage(cvs.toDataURL('image/jpeg',0.95),'JPEG',0,0,W,H);
+    pdf.save((meta.name||'flowchart')+'.pdf');
+  };
+  img.src = url;
 });
 
 // ════════════════════════════════════════════════════════════════
@@ -995,4 +990,7 @@ function showToast(msg) {
   // Push initial state for undo
   setTimeout(()=>{ history=[snapshot()]; histIdx=0; },100);
   applyVP();
+
+  // Save immediately on page leave so debounce timer doesn't get lost
+  window.addEventListener('beforeunload', doSave);
 })();
