@@ -379,6 +379,92 @@ let uploadedCanvasData = null;
 const modalUpload = document.getElementById('modal-upload');
 const fileInput   = document.getElementById('inp-json-file');
 
+// ── Workflow JSON converter ────────────────────────────────────
+// Converts {nodes, edges, lanes, ...} format → {shapes, connections}
+function convertWorkflowJSON(data) {
+  const SHAPE_TYPE = { rectangle:'rect', process:'rect', rect:'rect',
+                       diamond:'diamond', condition:'diamond',
+                       terminator:'oval', oval:'oval', start:'oval', end:'oval' };
+  const CP_DIR = [[0,-1],[1,0],[0,1],[-1,0]]; // top right bottom left
+
+  function cpCoord(s, i) {
+    return [[s.x+s.w*.5,s.y],[s.x+s.w,s.y+s.h*.5],[s.x+s.w*.5,s.y+s.h],[s.x,s.y+s.h*.5]][i];
+  }
+  function bestFromCp(fs, ts) {
+    const dx = (ts.x+ts.w/2)-(fs.x+fs.w/2), dy = (ts.y+ts.h/2)-(fs.y+fs.h/2);
+    const len = Math.hypot(dx,dy)||1;
+    let best=2, max=-Infinity;
+    CP_DIR.forEach(([nx,ny],i)=>{ const d=nx*dx/len+ny*dy/len; if(d>max){max=d;best=i;} });
+    return best;
+  }
+  function bestToCp(fs, fi, ts) {
+    const [sx,sy]=cpCoord(fs,fi);
+    const dx=sx-(ts.x+ts.w/2), dy=sy-(ts.y+ts.h/2);
+    const len=Math.hypot(dx,dy)||1;
+    let best=0, max=-Infinity;
+    CP_DIR.forEach(([nx,ny],i)=>{ const d=nx*dx/len+ny*dy/len; if(d>max){max=d;best=i;} });
+    return best;
+  }
+
+  // Scale positions: keep original pt values (they're already pixel-sized)
+  const OFFSET_X = 60, OFFSET_Y = 60;
+  const shapes = (data.nodes||[]).map(n => ({
+    id:      n.id,
+    type:    SHAPE_TYPE[n.shape] || 'rect',
+    x:       Math.round((n.position?.x ?? 0) + OFFSET_X),
+    y:       Math.round((n.position?.y ?? 0) + OFFSET_Y),
+    w:       Math.round(n.size?.w ?? 120),
+    h:       Math.max(Math.round(n.size?.h ?? 40), 36),
+    text:    (n.label || '').replace(/\\n/g,'\n').trim(),
+    subject: null
+  }));
+
+  const shapeById = Object.fromEntries(shapes.map(s=>[s.id,s]));
+
+  // Track outgoing connection count per diamond to auto-assign Y/N
+  const diamondOutCount = {};
+
+  const connections = (data.edges||[]).map(e => {
+    const fs = shapeById[e.from], ts = shapeById[e.to];
+    if (!fs||!ts) return null;
+    const fromPtIdx = bestFromCp(fs, ts);
+    const toPtIdx   = bestToCp(fs, fromPtIdx, ts);
+
+    // Y/N label logic: if source is diamond assign Y/N by edge label or order
+    let label = null;
+    if (fs.type === 'diamond') {
+      const lup = (e.label||'').toUpperCase();
+      if      (lup === 'Y' || lup.endsWith(' Y') || lup === '사용 가능' || lup === '채용 Y') label = 'Y';
+      else if (lup === 'N' || lup === '-' || lup === 'N(BLOCK)') label = 'N';
+      else {
+        // fall back to order: first out = Y, second = N
+        diamondOutCount[e.from] = (diamondOutCount[e.from]||0) + 1;
+        label = diamondOutCount[e.from] === 1 ? 'Y' : 'N';
+      }
+    }
+    return { id: e.id, fromId: e.from, toId: e.to, fromPtIdx, toPtIdx, label };
+  }).filter(Boolean);
+
+  return { shapes, connections };
+}
+
+// ── Parse any supported JSON format ───────────────────────────
+function parseCanvasJSON(data) {
+  // Native app format
+  if (Array.isArray(data.shapes) && !data.nodes) {
+    return { shapes: data.shapes, connections: data.connections || [] };
+  }
+  // Full export format {project, shapes, connections, analysis}
+  if (Array.isArray(data.shapes) && data.project) {
+    return { shapes: data.shapes, connections: data.connections || [] };
+  }
+  // Workflow / swim-lane format {nodes, edges, ...}
+  if (Array.isArray(data.nodes)) {
+    return convertWorkflowJSON(data);
+  }
+  return null;
+}
+
 document.getElementById('btn-upload-json').addEventListener('click', () => {
   fileInput.value = ''; fileInput.click();
 });
@@ -389,21 +475,23 @@ fileInput.addEventListener('change', () => {
   const reader = new FileReader();
   reader.onload = e => {
     try {
-      const data = JSON.parse(e.target.result);
-      // Support both raw {shapes,connections} and the full export format {project,shapes,connections}
-      const shapes      = data.shapes      || [];
-      const connections = data.connections || [];
-      uploadedCanvasData = { shapes, connections };
-      document.getElementById('upload-filename').textContent = `📎 ${file.name}  (도형 ${shapes.length}개, 연결 ${connections.length}개)`;
-      // Pre-fill name from project field if present
-      document.getElementById('ul-name').value     = data.project?.name || file.name.replace('.json','');
-      document.getElementById('ul-desc').value     = data.project?.description || '';
-      document.getElementById('ul-owner').value    = data.project?.owner || '';
+      const raw    = JSON.parse(e.target.result);
+      const canvas = parseCanvasJSON(raw);
+      if (!canvas) { showToast('지원하지 않는 JSON 형식입니다.'); return; }
+      uploadedCanvasData = canvas;
+      const shapeCount = canvas.shapes.length, connCount = canvas.connections.length;
+      document.getElementById('upload-filename').textContent =
+        `📎 ${file.name}  (도형 ${shapeCount}개, 연결 ${connCount}개)`;
+      // Pre-fill project info from metadata if available
+      const meta = raw.project || raw.metadata || {};
+      document.getElementById('ul-name').value     = meta.name || meta.title || file.name.replace('.json','');
+      document.getElementById('ul-desc').value     = meta.description || '';
+      document.getElementById('ul-owner').value    = meta.owner || '';
       document.getElementById('ul-password').value = '';
       modalUpload.classList.remove('hidden'); modalUpload.classList.add('flex');
       setTimeout(() => document.getElementById('ul-name').focus(), 50);
-    } catch {
-      showToast('JSON 파일을 읽을 수 없습니다.');
+    } catch(err) {
+      showToast('JSON 파일을 읽을 수 없습니다: ' + err.message);
     }
   };
   reader.readAsText(file);
