@@ -100,8 +100,12 @@
       <p class="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1.5">캔버스 조작</p>
       <ul class="text-[10px] text-slate-400 space-y-1 leading-relaxed">
         <li>🖱 휠 → 확대/축소</li>
-        <li>🤚 Space+드래그 → 이동</li>
-        <li>🤚 가운데 버튼+드래그</li>
+        <li>🤚 빈 공간 드래그 → 이동</li>
+        <li>🤚 가운데 버튼 드래그 → 이동</li>
+        <li>🔲 Space+드래그 → 올가미 선택</li>
+        <li>⌨️ Ctrl+Z → 실행 취소</li>
+        <li>⌨️ Ctrl+C/V → 복사/붙여넣기</li>
+        <li>⌨️ Ctrl+A → 전체 선택</li>
         <li>✏️ 더블클릭 → 텍스트</li>
         <li>🔗 연결점 드래그 → 화살표</li>
         <li>🖱 우클릭 → 주체 지정</li>
@@ -149,7 +153,7 @@
 
       <!-- Pan hint (shown briefly on first load) -->
       <div id="pan-hint" class="absolute bottom-3 left-1/2 -translate-x-1/2 bg-slate-800/80 backdrop-blur text-white text-[11px] px-3 py-1.5 rounded-full pointer-events-none opacity-0 transition-opacity">
-        Space + 드래그로 캔버스 이동 · 휠로 확대/축소
+        빈 공간 드래그 = 이동 · 휠 = 확대/축소 · Space+드래그 = 올가미 선택
       </div>
     </div>
 
