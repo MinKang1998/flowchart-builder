@@ -541,7 +541,7 @@ function wireCp(cp, shape, ptIdx) {
       const target=shapeAt(c.x,c.y);
       if (target&&target.id!==shape.id) {
         pushHistory();
-        createConnection(shape,ptIdx,target,nearestCp(target,c.x,c.y));
+        createConnection(shape,ptIdx,target,smartTargetCp(shape,ptIdx,target));
       }
     };
     window.addEventListener('mousemove',onMove); window.addEventListener('mouseup',onUp);
@@ -556,6 +556,20 @@ function nearestCp(shape,cx,cy) {
   let minD=Infinity,idx=0;
   for(let i=0;i<4;i++){const[x,y]=cpCoord(shape,i);const d=Math.hypot(x-cx,y-cy);if(d<minD){minD=d;idx=i;}}
   return idx;
+}
+
+// Pick the target CP whose outward normal best faces toward the source CP
+function smartTargetCp(fromShape, fromPtIdx, toShape) {
+  const [sx, sy] = cpCoord(fromShape, fromPtIdx);
+  const tcx = toShape.x + toShape.w / 2, tcy = toShape.y + toShape.h / 2;
+  const dx = sx - tcx, dy = sy - tcy;
+  const len = Math.hypot(dx, dy) || 1;
+  let best = 0, maxDot = -Infinity;
+  CP_DIR.forEach(([nx, ny], i) => {
+    const dot = nx * dx / len + ny * dy / len;
+    if (dot > maxDot) { maxDot = dot; best = i; }
+  });
+  return best;
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -610,10 +624,12 @@ function syncConnDOM(conn) {
   if(!fs||!ts||!conn.path) return;
   const [x1,y1]=cpCoord(fs,conn.fromPtIdx), [x2,y2]=cpCoord(ts,conn.toPtIdx);
 
-  // Control-point offset = proportional to distance, minimum 50px
-  const dist  = Math.max(Math.hypot(x2-x1, y2-y1)*0.45, 50);
-  const d1    = CP_DIR[conn.fromPtIdx];   // exit direction at source
-  const d2    = CP_DIR[conn.toPtIdx];     // outward normal at target (arrow enters opposite)
+  // For opposite-facing CPs (e.g. bottom→top) no hard minimum to prevent S-curves
+  const rawDist = Math.hypot(x2-x1, y2-y1);
+  const d1    = CP_DIR[conn.fromPtIdx];
+  const d2    = CP_DIR[conn.toPtIdx];
+  const oppFacing = d1[0]*d2[0] + d1[1]*d2[1] < 0;
+  const dist  = oppFacing ? rawDist * 0.4 : Math.max(rawDist * 0.4, 40);
   const cx1   = x1 + d1[0]*dist;
   const cy1   = y1 + d1[1]*dist;
   const cx2   = x2 + d2[0]*dist;         // pull handle outward from target side
@@ -935,7 +951,7 @@ function showToast(msg) {
     setTimeout(()=>{
       createConnection(s1,2,s2,0); createConnection(s2,2,s3,0);
       createConnection(s3,1,s4,3); createConnection(s3,2,s5,0);
-      createConnection(s4,2,s5,1); createConnection(s5,2,s6,0);
+      createConnection(s4,2,s5,smartTargetCp(s4,2,s5)); createConnection(s5,2,s6,0);
     },30);
   } else {
     loadCanvas(data);
