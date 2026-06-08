@@ -390,40 +390,47 @@ function wireShapeEvents(g, shape) {
 
     const isCtrl = e.ctrlKey || e.metaKey;
 
-    // Ctrl+click on unselected shape = toggle selection only (no drag-copy)
-    // Ctrl+click on already-selected group = start duplicate-drag
-    if (isCtrl && !selectedIds.has(shape.id)) {
+    // Update selection state before deciding drag mode
+    if (isCtrl) {
+      // Ctrl+click: add/remove this shape from selection (multi-select)
       toggleSelectShape(shape.id);
-      return; // don't start drag
-    }
-    if (!isCtrl && !selectedIds.has(shape.id)) {
-      clearSel(); addSelectShape(shape.id);
+    } else {
+      // Normal click: if shape not yet selected, switch to it alone
+      if (!selectedIds.has(shape.id)) { clearSel(); addSelectShape(shape.id); }
     }
 
     const {x:sx,y:sy}=svgOff(e.clientX,e.clientY);
     const c=toCanvas(sx,sy);
-    drag=true; didMove=false;
 
-    // ── Ctrl+drag on selected group → duplicate then drag copies ──
-    let movers; // array of {s, ox, oy}
-    if (isCtrl && selectedIds.size > 0) {
-      pushHistory();
-      const { newShapes, idMap } = duplicateSelected();
-      // Clear selection → select copies
-      clearSel();
-      newShapes.forEach(s => { selectedIds.add(s.id); s.el.classList.add('selected'); });
-      movers = newShapes.map(s => ({ s, ox: c.x-s.x, oy: c.y-s.y }));
-      showToast(`${newShapes.length}개 복제됨  ↕ 드래그로 위치 지정`);
-    } else {
-      movers = [...selectedIds]
-        .map(id=>shapes.find(s=>s.id===id)).filter(Boolean)
-        .map(s=>({ s, ox: c.x-s.x, oy: c.y-s.y }));
-    }
+    // Decide drag mode on mousemove (not on mousedown),
+    // so a plain Ctrl+click without drag just changes selection.
+    let movers = null;
+    let ctrlDuplicated = false;
+    drag=true; didMove=false;
 
     const onMove = ev => {
       if (!drag) return;
       const {x:sx2,y:sy2}=svgOff(ev.clientX,ev.clientY);
       const p=toCanvas(sx2,sy2);
+
+      // Initialise movers on first actual movement
+      if (!movers) {
+        if (isCtrl && !ctrlDuplicated && selectedIds.size > 0) {
+          // Ctrl+drag → duplicate selected, then drag the copies
+          pushHistory();
+          const { newShapes } = duplicateSelected();
+          clearSel();
+          newShapes.forEach(s => { selectedIds.add(s.id); s.el.classList.add('selected'); });
+          movers = newShapes.map(s => ({ s, ox: c.x-s.x, oy: c.y-s.y }));
+          ctrlDuplicated = true;
+          showToast(`${newShapes.length}개 복제됨 — 드래그로 이동`);
+        } else {
+          movers = [...selectedIds]
+            .map(id => shapes.find(s=>s.id===id)).filter(Boolean)
+            .map(s => ({ s, ox: c.x-s.x, oy: c.y-s.y }));
+        }
+      }
+
       didMove=true;
       movers.forEach(({s,ox:ox2,oy:oy2})=>{ s.x=p.x-ox2; s.y=p.y-oy2; syncShapeDOM(s); });
     };
@@ -736,38 +743,49 @@ function pasteClipboard() {
 
 // ════════════════════════════════════════════════════════════════
 //  Keyboard shortcuts
+//  NOTE: textEditor uses Tailwind 'hidden' class (display:none via CSS),
+//  so style.display is '' not 'none' until explicitly set.
+//  We use editingShape !== null to detect open state instead.
 // ════════════════════════════════════════════════════════════════
 document.addEventListener('keydown', e => {
-  const inInput = textEditor.style.display!=='none' ||
-    e.target.tagName==='INPUT' || e.target.tagName==='TEXTAREA';
+  // True when user is typing in a text field
+  const inInput = editingShape !== null
+    || e.target.tagName === 'INPUT'
+    || e.target.tagName === 'TEXTAREA'
+    || e.target.isContentEditable;
 
-  if (!inInput) {
-    // Delete
-    if ((e.key==='Delete'||e.key==='Backspace') && selectedIds.size) {
-      e.preventDefault(); deleteSelected(); return;
-    }
-    // Undo
-    if ((e.key==='z'||e.key==='Z') && (e.ctrlKey||e.metaKey) && !e.shiftKey) {
-      e.preventDefault(); undo(); return;
-    }
-    // Copy
-    if ((e.key==='c'||e.key==='C') && (e.ctrlKey||e.metaKey)) {
-      e.preventDefault(); copySelected(); return;
-    }
-    // Paste
-    if ((e.key==='v'||e.key==='V') && (e.ctrlKey||e.metaKey)) {
-      e.preventDefault(); pasteClipboard(); return;
-    }
-    // Select all
-    if ((e.key==='a'||e.key==='A') && (e.ctrlKey||e.metaKey)) {
-      e.preventDefault();
-      clearSel();
-      shapes.forEach(s=>{ selectedIds.add(s.id); s.el.classList.add('selected'); });
-      showToast(`${shapes.length}개 도형 전체 선택`);
-      return;
-    }
-    // Escape = clear selection
-    if (e.key==='Escape') { clearSel(); return; }
+  // Allow Escape even in input (to close editor)
+  if (e.key === 'Escape') { closeCtx(); if (inInput) closeTextEditor(true); else clearSel(); return; }
+
+  if (inInput) return; // block all other shortcuts while typing
+
+  // Delete / Backspace
+  if ((e.key==='Delete'||e.key==='Backspace') && selectedIds.size) {
+    e.preventDefault(); deleteSelected(); return;
+  }
+
+  const mod = e.ctrlKey || e.metaKey;
+  if (!mod) return; // remaining shortcuts all need Ctrl/Cmd
+
+  // Undo  Ctrl+Z
+  if ((e.key==='z'||e.key==='Z') && !e.shiftKey) {
+    e.preventDefault(); undo(); return;
+  }
+  // Copy  Ctrl+C
+  if (e.key==='c'||e.key==='C') {
+    e.preventDefault(); copySelected(); return;
+  }
+  // Paste  Ctrl+V
+  if (e.key==='v'||e.key==='V') {
+    e.preventDefault(); pasteClipboard(); return;
+  }
+  // Select all  Ctrl+A
+  if (e.key==='a'||e.key==='A') {
+    e.preventDefault();
+    clearSel();
+    shapes.forEach(s=>{ selectedIds.add(s.id); s.el.classList.add('selected'); });
+    showToast(`${shapes.length}개 도형 전체 선택`);
+    return;
   }
 });
 
