@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>FlowChart Builder – 프로젝트</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-950 min-h-screen text-slate-100">
+
+<!-- ── Top Nav ───────────────────────────────────────────────── -->
+<nav class="border-b border-slate-800 px-6 py-3 flex items-center justify-between sticky top-0 bg-slate-950/90 backdrop-blur z-50">
+  <div class="flex items-center gap-3">
+    <div class="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center text-white font-bold text-sm">F</div>
+    <span class="font-semibold text-sm tracking-tight">FlowChart Builder</span>
+    <span class="text-slate-600 text-xs hidden sm:block">| 업무 프로세스 분석 플랫폼</span>
+  </div>
+  <div class="flex items-center gap-2">
+    <button id="btn-import"
+      class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition-colors">
+      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+      URL로 가져오기
+    </button>
+    <button id="btn-new"
+      class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold transition-colors">
+      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+      새 프로젝트
+    </button>
+  </div>
+</nav>
+
+<!-- ── Hero banner (shown when no projects) ─────────────────── -->
+<div id="empty-state" class="hidden flex-col items-center justify-center py-28 px-6 text-center">
+  <div class="w-16 h-16 rounded-2xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center mb-4">
+    <svg class="w-8 h-8 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 0v10m0-10a2 2 0 012 2h2a2 2 0 012-2V7"/></svg>
+  </div>
+  <h2 class="text-xl font-bold text-slate-200 mb-2">아직 프로젝트가 없습니다</h2>
+  <p class="text-slate-500 text-sm mb-6 max-w-sm">새 프로젝트를 만들거나, 공유받은 URL로 프로세스도를 가져오세요.</p>
+  <button onclick="document.getElementById('btn-new').click()"
+    class="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 rounded-xl text-sm font-semibold text-white transition-colors">
+    첫 프로젝트 만들기
+  </button>
+</div>
+
+<!-- ── Project grid ──────────────────────────────────────────── -->
+<main class="max-w-6xl mx-auto px-6 py-8">
+  <div class="flex items-center justify-between mb-6">
+    <div>
+      <h1 class="text-lg font-bold text-slate-100">전체 프로젝트</h1>
+      <p id="project-subtitle" class="text-xs text-slate-500 mt-0.5">로딩 중...</p>
+    </div>
+    <div class="flex items-center gap-2">
+      <input id="search" type="text" placeholder="프로젝트 검색..."
+        class="bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-300 placeholder-slate-500 outline-none focus:border-blue-500 w-44 transition-colors"/>
+    </div>
+  </div>
+  <div id="project-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"></div>
+</main>
+
+<!-- ── New Project Modal ─────────────────────────────────────── -->
+<div id="modal-new" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[300] hidden items-center justify-center p-4">
+  <div class="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-md">
+    <div class="p-6 border-b border-slate-800">
+      <h2 class="text-base font-bold text-slate-100">새 프로젝트 만들기</h2>
+      <p class="text-xs text-slate-500 mt-1">팀 프로세스도를 구성할 새 프로젝트를 생성합니다.</p>
+    </div>
+    <div class="p-6 space-y-4">
+      <div>
+        <label class="block text-xs font-semibold text-slate-400 mb-1.5">프로젝트 이름 <span class="text-red-400">*</span></label>
+        <input id="inp-name" type="text" placeholder="예) 구매 승인 프로세스"
+          class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-500 outline-none focus:border-blue-500 transition-colors"/>
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-slate-400 mb-1.5">설명 (선택)</label>
+        <textarea id="inp-desc" rows="2" placeholder="이 프로세스의 목적이나 범위를 간략히..."
+          class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-500 outline-none focus:border-blue-500 resize-none transition-colors"></textarea>
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-slate-400 mb-1.5">담당자 이름 (선택)</label>
+        <input id="inp-owner" type="text" placeholder="예) 김민준"
+          class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-500 outline-none focus:border-blue-500 transition-colors"/>
+      </div>
+    </div>
+    <div class="px-6 pb-6 flex gap-2 justify-end">
+      <button id="btn-cancel-new"
+        class="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-medium transition-colors">취소</button>
+      <button id="btn-create"
+        class="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold transition-colors">프로젝트 생성</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Import Modal ───────────────────────────────────────────── -->
+<div id="modal-import" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[300] hidden items-center justify-center p-4">
+  <div class="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-lg">
+    <div class="p-6 border-b border-slate-800">
+      <h2 class="text-base font-bold text-slate-100">URL로 프로젝트 가져오기</h2>
+      <p class="text-xs text-slate-500 mt-1">공유받은 URL을 붙여넣으면 프로젝트를 가져올 수 있습니다.</p>
+    </div>
+    <div class="p-6">
+      <textarea id="inp-import-url" rows="4" placeholder="공유받은 URL 또는 내보내기 코드를 붙여넣으세요..."
+        class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-300 placeholder-slate-500 outline-none focus:border-blue-500 resize-none font-mono transition-colors"></textarea>
+      <p id="import-error" class="text-red-400 text-xs mt-2 hidden">올바른 공유 코드가 아닙니다. 다시 확인해주세요.</p>
+    </div>
+    <div class="px-6 pb-6 flex gap-2 justify-end">
+      <button id="btn-cancel-import"
+        class="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-medium transition-colors">취소</button>
+      <button id="btn-do-import"
+        class="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold transition-colors">가져오기</button>
+    </div>
+  </div>
+</div>
+
+<script src="db.js"></script>
+<script>
+// ── Render helpers ─────────────────────────────────────────────
+function timeAgo(iso) {
+  const d = (Date.now() - new Date(iso).getTime()) / 1000;
+  if (d < 60)   return '방금 전';
+  if (d < 3600) return Math.floor(d/60) + '분 전';
+  if (d < 86400) return Math.floor(d/3600) + '시간 전';
+  return Math.floor(d/86400) + '일 전';
+}
+
+function subjectBar(stats) {
+  const t = stats.total || 1;
+  const hp = Math.round(stats.human / t * 100);
+  const ap = Math.round(stats.ai    / t * 100);
+  const up = 100 - hp - ap;
+  return `
+    <div class="flex h-1.5 rounded-full overflow-hidden gap-px mt-2">
+      ${hp ? `<div class="bg-blue-500 transition-all" style="width:${hp}%" title="사람 ${stats.human}개"></div>` : ''}
+      ${ap ? `<div class="bg-purple-500 transition-all" style="width:${ap}%" title="AI ${stats.ai}개"></div>` : ''}
+      ${up ? `<div class="bg-slate-700 transition-all" style="width:${up}%"></div>` : ''}
+    </div>`;
+}
+
+function renderCard(p) {
+  const stats  = DB.getStats(p.id);
+  const colors = ['from-blue-600/20', 'from-purple-600/20', 'from-emerald-600/20', 'from-amber-600/20', 'from-rose-600/20'];
+  const color  = colors[parseInt(p.id.slice(-1), 16) % colors.length];
+  return `
+    <div class="group relative bg-slate-900 border border-slate-800 rounded-xl p-5 hover:border-slate-600 cursor-pointer transition-all hover:shadow-xl hover:shadow-black/30 hover:-translate-y-0.5"
+      onclick="openProject('${p.id}')">
+      <div class="absolute inset-0 rounded-xl bg-gradient-to-br ${color} to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"></div>
+      <div class="relative">
+        <div class="flex items-start justify-between mb-3">
+          <div class="w-9 h-9 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-lg">
+            📋
+          </div>
+          <div class="flex gap-1">
+            <button onclick="event.stopPropagation(); shareProject('${p.id}')"
+              class="opacity-0 group-hover:opacity-100 w-7 h-7 rounded-lg bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-slate-400 hover:text-white transition-all"
+              title="공유 링크 복사">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/></svg>
+            </button>
+            <button onclick="event.stopPropagation(); deleteProject('${p.id}')"
+              class="opacity-0 group-hover:opacity-100 w-7 h-7 rounded-lg bg-slate-800 hover:bg-red-600 flex items-center justify-center text-slate-400 hover:text-white transition-all"
+              title="삭제">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+            </button>
+          </div>
+        </div>
+        <h3 class="font-semibold text-sm text-slate-100 truncate mb-1">${escHtml(p.name)}</h3>
+        ${p.description ? `<p class="text-xs text-slate-500 truncate mb-2">${escHtml(p.description)}</p>` : ''}
+        <div class="flex items-center gap-2 text-[11px] text-slate-500">
+          ${p.owner ? `<span class="flex items-center gap-1"><span class="text-slate-600">👤</span>${escHtml(p.owner)}</span><span class="text-slate-700">·</span>` : ''}
+          <span>${timeAgo(p.updatedAt)}</span>
+          <span class="text-slate-700">·</span>
+          <span>${stats.total}개 단계</span>
+        </div>
+        ${stats.total > 0 ? `
+          <div class="mt-3">
+            ${subjectBar(stats)}
+            <div class="flex items-center gap-3 mt-1.5 text-[10px] text-slate-500">
+              <span class="flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-blue-500 inline-block"></span>${stats.human} 사람</span>
+              <span class="flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-purple-500 inline-block"></span>${stats.ai} AI</span>
+              ${stats.unassigned ? `<span class="flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-slate-600 inline-block"></span>${stats.unassigned} 미지정</span>` : ''}
+            </div>
+          </div>` : ''}
+      </div>
+    </div>`;
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Main render ────────────────────────────────────────────────
+function renderDashboard(filter = '') {
+  const all = DB.listProjects().filter(p =>
+    !filter || p.name.toLowerCase().includes(filter.toLowerCase()) ||
+    (p.owner || '').toLowerCase().includes(filter.toLowerCase())
+  );
+  const grid    = document.getElementById('project-grid');
+  const empty   = document.getElementById('empty-state');
+  const sub     = document.getElementById('project-subtitle');
+  const allList = DB.listProjects();
+
+  sub.textContent = `총 ${allList.length}개 프로젝트`;
+  if (!allList.length) {
+    grid.innerHTML = '';
+    empty.classList.remove('hidden');
+    empty.classList.add('flex');
+    return;
+  }
+  empty.classList.add('hidden');
+  empty.classList.remove('flex');
+  if (!all.length) {
+    grid.innerHTML = `<div class="col-span-full py-12 text-center text-slate-500 text-sm">"${escHtml(filter)}" 검색 결과가 없습니다.</div>`;
+    return;
+  }
+  grid.innerHTML = all.map(renderCard).join('');
+}
+
+// ── Actions ────────────────────────────────────────────────────
+function openProject(id) {
+  location.href = `editor.html?id=${id}`;
+}
+
+function shareProject(id) {
+  const encoded = DB.exportToString(id);
+  const url = location.origin + location.pathname + `?import=${encoded}`;
+  navigator.clipboard.writeText(url).then(() => {
+    showToast('공유 링크가 클립보드에 복사되었습니다 ✓');
+  }).catch(() => {
+    prompt('아래 링크를 복사하세요:', url);
+  });
+}
+
+function deleteProject(id) {
+  const p = DB.getProject(id);
+  if (!p) return;
+  if (!confirm(`"${p.name}" 프로젝트를 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`)) return;
+  DB.deleteProject(id);
+  renderDashboard(document.getElementById('search').value);
+}
+
+function showToast(msg) {
+  const t = document.createElement('div');
+  t.className = 'fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-800 border border-slate-700 text-slate-200 text-xs px-4 py-2.5 rounded-full shadow-lg z-[999] transition-opacity';
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => { t.style.opacity = '0'; setTimeout(() => t.remove(), 300); }, 2500);
+}
+
+// ── Modal: New project ─────────────────────────────────────────
+const modalNew = document.getElementById('modal-new');
+document.getElementById('btn-new').addEventListener('click', () => {
+  document.getElementById('inp-name').value = '';
+  document.getElementById('inp-desc').value = '';
+  document.getElementById('inp-owner').value = '';
+  modalNew.classList.remove('hidden');
+  modalNew.classList.add('flex');
+  setTimeout(() => document.getElementById('inp-name').focus(), 50);
+});
+document.getElementById('btn-cancel-new').addEventListener('click', () => {
+  modalNew.classList.add('hidden'); modalNew.classList.remove('flex');
+});
+document.getElementById('btn-create').addEventListener('click', () => {
+  const name = document.getElementById('inp-name').value.trim();
+  if (!name) { document.getElementById('inp-name').focus(); return; }
+  const p = DB.createProject({
+    name,
+    description: document.getElementById('inp-desc').value.trim(),
+    owner: document.getElementById('inp-owner').value.trim()
+  });
+  modalNew.classList.add('hidden'); modalNew.classList.remove('flex');
+  location.href = `editor.html?id=${p.id}&new=1`;
+});
+document.getElementById('inp-name').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('btn-create').click();
+});
+
+// ── Modal: Import ──────────────────────────────────────────────
+const modalImport = document.getElementById('modal-import');
+document.getElementById('btn-import').addEventListener('click', () => {
+  document.getElementById('inp-import-url').value = '';
+  document.getElementById('import-error').classList.add('hidden');
+  modalImport.classList.remove('hidden');
+  modalImport.classList.add('flex');
+  setTimeout(() => document.getElementById('inp-import-url').focus(), 50);
+});
+document.getElementById('btn-cancel-import').addEventListener('click', () => {
+  modalImport.classList.add('hidden'); modalImport.classList.remove('flex');
+});
+document.getElementById('btn-do-import').addEventListener('click', () => {
+  let raw = document.getElementById('inp-import-url').value.trim();
+  // Extract encoded part from full URL if pasted
+  try { const u = new URL(raw); raw = u.searchParams.get('import') || raw; } catch {}
+  const p = DB.importFromString(raw);
+  if (!p) {
+    document.getElementById('import-error').classList.remove('hidden');
+    return;
+  }
+  modalImport.classList.add('hidden'); modalImport.classList.remove('flex');
+  showToast(`"${p.name}" 프로젝트를 가져왔습니다 ✓`);
+  renderDashboard();
+});
+
+// ── Close modals on backdrop click ────────────────────────────
+[modalNew, modalImport].forEach(m => {
+  m.addEventListener('click', e => { if (e.target === m) { m.classList.add('hidden'); m.classList.remove('flex'); } });
+});
+
+// ── Search ─────────────────────────────────────────────────────
+document.getElementById('search').addEventListener('input', e => renderDashboard(e.target.value));
+
+// ── Auto-import from URL (?import=...) ─────────────────────────
+(function () {
+  const params = new URLSearchParams(location.search);
+  const enc = params.get('import');
+  if (enc) {
+    history.replaceState({}, '', location.pathname);
+    const p = DB.importFromString(enc);
+    if (p) {
+      renderDashboard();
+      setTimeout(() => showToast(`"${p.name}" 프로젝트를 자동으로 가져왔습니다 ✓`), 300);
+    }
+  }
+})();
+
+// ── Boot ───────────────────────────────────────────────────────
+renderDashboard();
+</script>
+</body>
+</html>
