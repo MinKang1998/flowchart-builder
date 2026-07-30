@@ -49,9 +49,24 @@
   $$('.tab-btn').forEach(b => b.addEventListener('click', () => setTab(b.dataset.tab)));
 
   // ════════════════════════════════════════════════════════════
+  //  자동 정렬: DAY는 날짜순, 각 DAY 안은 시간순 (안정 정렬)
+  //   · 날짜/시간이 없는 항목은 뒤로, 기존 상대순서는 유지
+  // ════════════════════════════════════════════════════════════
+  function sortTrip() {
+    const dk = s => (s && /^\d{4}-\d{2}-\d{2}$/.test(s)) ? s : '9999-99-99';
+    const tk = s => (s && /^\d{2}:\d{2}$/.test(s)) ? s : '99:99';
+    trip.days.sort((a, b) => dk(a.date).localeCompare(dk(b.date)));
+    trip.days.forEach(d => {
+      d.items.sort((a, b) => tk(a.time).localeCompare(tk(b.time)));
+    });
+  }
+
+  // ════════════════════════════════════════════════════════════
   //  일정표 렌더링
   // ════════════════════════════════════════════════════════════
   function renderItinerary() {
+    sortTrip();
+    save();
     const wrap = $('#days-container');
     wrap.innerHTML = '';
     $('#itinerary-empty').classList.toggle('hidden', trip.days.length > 0);
@@ -145,9 +160,20 @@
     if (!id) return;
     const day = trip.days.find(d => d.id === id);
     if (!day) return;
-    if (e.target.classList.contains('day-label')) day.label = e.target.value;
-    if (e.target.classList.contains('day-date'))  day.date = e.target.value;
-    save();
+    // 라벨은 입력 중 저장만 (재렌더 시 포커스 유지)
+    if (e.target.classList.contains('day-label')) { day.label = e.target.value; save(); }
+  });
+  // 날짜 변경은 즉시 날짜순 재정렬
+  $('#days-container').addEventListener('change', e => {
+    const id = e.target.dataset.day;
+    if (!id) return;
+    const day = trip.days.find(d => d.id === id);
+    if (!day) return;
+    if (e.target.classList.contains('day-date')) {
+      day.date = e.target.value;
+      save();
+      renderItinerary();
+    }
   });
   $('#days-container').addEventListener('click', e => {
     const delBtn = e.target.closest('.day-del');
