@@ -417,6 +417,14 @@
     $('#settings-modal').classList.add('hidden');
     refreshChatKeyState();
   });
+  $('#settings-clear-key').addEventListener('click', () => {
+    const s = Store.loadSettings();
+    delete s.apiKey;
+    Store.saveSettings(s);
+    $('#settings-apikey').value = '';
+    refreshChatKeyState();
+    alert('저장된 API 키를 이 브라우저에서 삭제했습니다.');
+  });
 
   // ════════════════════════════════════════════════════════════
   //  AI 챗봇

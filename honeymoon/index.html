@@ -143,10 +143,20 @@
       <input id="settings-websearch" type="checkbox" class="rounded"/>
       실시간 웹 검색 사용 (최신 맛집·명소 정보 확인)
     </label>
-    <button id="settings-save"
-      class="w-full py-2.5 rounded-lg bg-rose-500 hover:bg-rose-600 text-white text-sm font-semibold transition">
-      저장
-    </button>
+    <div class="flex gap-2">
+      <button id="settings-clear-key"
+        class="px-3 py-2.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 text-sm font-medium transition">
+        키 삭제
+      </button>
+      <button id="settings-save"
+        class="flex-1 py-2.5 rounded-lg bg-rose-500 hover:bg-rose-600 text-white text-sm font-semibold transition">
+        저장
+      </button>
+    </div>
+    <p class="text-[10px] text-slate-400 mt-3 leading-relaxed">
+      🔒 입력한 키는 소스코드나 서버가 아닌 <b>이 브라우저(localStorage)</b>에만 남습니다.
+      공용 기기에서는 사용 후 <b>키 삭제</b>를 눌러 지워주세요.
+    </p>
   </div>
 </div>
 
