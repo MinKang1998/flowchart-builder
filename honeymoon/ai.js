@@ -98,8 +98,9 @@ const AI = (() => {
     return null;
   }
 
-  // ── 항공권 사진/PDF → 항공편 정보 추출 (멀티모달 비전) ───────
-  async function extractFlight(file) {
+  // ── 예약/바우처/항공권 사진·PDF → 일정 항목 추출 (멀티모달 비전) ──
+  //  항공권·숙소·맛집·투어·바우처 등 어떤 예약 문서든 일정으로 정리.
+  async function extractReservation(file) {
     const settings = Store.loadSettings();
     const apiKey = settings.apiKey;
     if (!apiKey) throw new Error('NO_KEY');
@@ -111,33 +112,34 @@ const AI = (() => {
       : { type: 'image', source: { type: 'base64', media_type: file.type || 'image/jpeg', data: b64 } };
 
     const instruction = [
-      '첨부한 이미지/문서는 항공권(e-티켓 / 탑승권 / 예약확인서)입니다. 항공편 정보를 추출하세요.',
-      '아래 JSON 형식으로만 답하세요. 설명 문장이나 코드펜스 없이 순수 JSON만 출력합니다.',
+      '첨부한 이미지/문서는 여행 예약 관련 자료입니다. 예: 항공권(e-티켓/탑승권), 호텔·숙소 예약확인서,',
+      '식당 예약, 투어·입장권·액티비티 바우처, 렌터카·교통 예약 등.',
+      '내용을 읽고 여행 일정 항목으로 정리하세요. 아래 JSON 형식으로만 답하세요.',
+      '설명 문장이나 코드펜스 없이 순수 JSON만 출력합니다.',
       '{',
-      '  "flights": [',
+      '  "entries": [',
       '    {',
-      '      "airline": "항공사명(한글 우선, 없으면 코드)",',
-      '      "flightNo": "편명 (예: KE931)",',
-      '      "depCity": "출발 도시",',
-      '      "depAirport": "출발 공항명 또는 코드 (예: 인천 ICN)",',
-      '      "arrCity": "도착 도시",',
-      '      "arrAirport": "도착 공항명 또는 코드 (예: 로마 FCO)",',
-      '      "depDate": "YYYY-MM-DD (연도가 안 보이면 빈 문자열)",',
-      '      "depTime": "HH:MM 24시간 (없으면 빈 문자열)",',
-      '      "arrDate": "YYYY-MM-DD 또는 빈 문자열",',
-      '      "arrTime": "HH:MM 또는 빈 문자열",',
-      '      "seat": "좌석 또는 빈 문자열",',
-      '      "booking": "예약번호(PNR) 또는 빈 문자열"',
+      '      "category": "transport | hotel | food | sight | shopping | etc 중 하나",',
+      '      "title": "간결한 제목. 맨 앞에 종류 이모지를 붙이세요(항공 ✈️, 숙소 🏨, 맛집 🍽, 투어·명소 📸, 쇼핑 🛍, 기타 📌). 예: \'✈️ 대한항공 KE931 인천→로마\', \'🏨 힐튼 로마 체크인\'",',
+      '      "place": "장소명 또는 주소(공항/호텔/식당/장소). 지도 검색에 쓰이니 최대한 구체적으로",',
+      '      "city": "도시",',
+      '      "date": "YYYY-MM-DD (연도가 안 보이면 빈 문자열)",',
+      '      "time": "HH:MM 24시간(체크인·출발·예약 시각 등, 없으면 빈 문자열)",',
+      '      "confirmation": "예약번호/바우처번호/PNR (없으면 빈 문자열)",',
+      '      "notes": "핵심 정보를 줄바꿈으로. 항공: 도착시각·좌석. 숙소: 체크아웃 날짜·박수·객실. 식당/투어: 인원·옵션 등"',
       '    }',
       '  ]',
       '}',
-      '항공권이 아니거나 정보를 찾지 못하면 {"flights": []} 를 반환하세요.',
-      '왕복·경유 등 여러 구간이면 각 구간을 배열에 순서대로 넣으세요.',
+      '규칙:',
+      '- 항공권 왕복·경유는 각 구간을 별도 entry로.',
+      '- 호텔은 체크인을 entry의 date/time으로 하고 체크아웃 정보는 notes에 적으세요.',
+      '- 여러 예약이 한 문서에 있으면 각각 entry로 나누세요.',
+      '- 여행 예약과 무관하거나 정보를 못 찾으면 {"entries": []} 를 반환하세요.',
     ].join('\n');
 
     const body = {
       model: settings.model || MODEL,
-      max_tokens: 1024,
+      max_tokens: 1500,
       messages: [{ role: 'user', content: [ mediaBlock, { type: 'text', text: instruction } ] }],
     };
 
@@ -161,9 +163,9 @@ const AI = (() => {
     const text = (data.content || [])
       .filter(b => b.type === 'text').map(b => b.text).join('\n').trim();
     const json = parseJsonLoose(text);
-    if (!json || !Array.isArray(json.flights)) return { flights: [] };
+    if (!json || !Array.isArray(json.entries)) return { entries: [] };
     return json;
   }
 
-  return { ask, hasKey, extractFlight, MODEL };
+  return { ask, hasKey, extractReservation, MODEL };
 })();
