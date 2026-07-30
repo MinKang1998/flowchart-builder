@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>허니문 플래너 – 신혼여행 계획·기록</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+  <link rel="stylesheet" href="style.css"/>
+</head>
+<body class="bg-rose-50 min-h-screen text-slate-800">
+
+<!-- ── 상단 네비 ────────────────────────────────────────────── -->
+<nav class="border-b border-rose-100 bg-white/90 backdrop-blur sticky top-0 z-[1000]">
+  <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
+    <div class="flex items-center gap-2">
+      <span class="text-xl">💍</span>
+      <span class="font-bold text-rose-600 tracking-tight">허니문 플래너</span>
+      <span class="hidden sm:inline text-xs text-slate-400">신혼여행 계획 · 기록 · AI 추천</span>
+    </div>
+    <button id="btn-settings"
+      class="text-xs px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 font-medium transition">
+      ⚙️ 설정
+    </button>
+  </div>
+</nav>
+
+<!-- ── 여행 개요 ────────────────────────────────────────────── -->
+<header class="max-w-5xl mx-auto px-4 pt-5">
+  <div class="bg-white rounded-2xl shadow-sm border border-rose-100 p-4 sm:p-5">
+    <div class="grid grid-cols-1 sm:grid-cols-4 gap-3">
+      <label class="flex flex-col gap-1 sm:col-span-2">
+        <span class="text-[11px] text-slate-500 font-medium">✈️ 목적지</span>
+        <input id="trip-destination" type="text" placeholder="예: 이탈리아 로마·베네치아"
+          class="text-sm px-3 py-2 rounded-lg border border-slate-200 focus:border-rose-400 focus:ring-1 focus:ring-rose-200 outline-none"/>
+      </label>
+      <label class="flex flex-col gap-1">
+        <span class="text-[11px] text-slate-500 font-medium">📅 출발</span>
+        <input id="trip-start" type="date"
+          class="text-sm px-3 py-2 rounded-lg border border-slate-200 focus:border-rose-400 outline-none"/>
+      </label>
+      <label class="flex flex-col gap-1">
+        <span class="text-[11px] text-slate-500 font-medium">📅 도착</span>
+        <input id="trip-end" type="date"
+          class="text-sm px-3 py-2 rounded-lg border border-slate-200 focus:border-rose-400 outline-none"/>
+      </label>
+    </div>
+  </div>
+</header>
+
+<!-- ── 탭 ───────────────────────────────────────────────────── -->
+<div class="max-w-5xl mx-auto px-4 mt-5">
+  <div class="flex gap-1 bg-white rounded-xl p-1 border border-rose-100 shadow-sm">
+    <button data-tab="itinerary" class="tab-btn flex-1 text-sm font-semibold py-2 rounded-lg transition">🗓 일정표</button>
+    <button data-tab="map"       class="tab-btn flex-1 text-sm font-semibold py-2 rounded-lg transition">🗺 동선 지도</button>
+    <button data-tab="ai"        class="tab-btn flex-1 text-sm font-semibold py-2 rounded-lg transition">✨ AI 추천</button>
+  </div>
+</div>
+
+<main class="max-w-5xl mx-auto px-4 py-5">
+
+  <!-- ── 일정표 탭 ──────────────────────────────────────────── -->
+  <section id="panel-itinerary" class="tab-panel">
+    <div class="flex items-center justify-between mb-3">
+      <h2 class="text-sm font-bold text-slate-700">🗓 일정표</h2>
+      <button id="btn-add-day"
+        class="text-xs px-3 py-1.5 rounded-lg bg-rose-500 hover:bg-rose-600 text-white font-semibold transition">
+        + 날짜(DAY) 추가
+      </button>
+    </div>
+    <p class="text-[11px] text-slate-400 mb-3">일정 카드를 드래그해서 순서를 바꿀 수 있어요. 순서는 지도 동선에 그대로 반영됩니다.</p>
+    <div id="days-container" class="space-y-4"></div>
+    <div id="itinerary-empty" class="hidden text-center text-slate-400 text-sm py-16">
+      아직 일정이 없어요. <b>+ 날짜 추가</b>로 첫 날을 만들어 보세요.
+    </div>
+  </section>
+
+  <!-- ── 지도 탭 ────────────────────────────────────────────── -->
+  <section id="panel-map" class="tab-panel hidden">
+    <div class="flex flex-wrap items-center gap-2 mb-3">
+      <h2 class="text-sm font-bold text-slate-700 mr-auto">🗺 동선 지도</h2>
+      <select id="map-day-filter"
+        class="text-xs px-3 py-1.5 rounded-lg border border-slate-200 bg-white outline-none">
+        <option value="all">전체 일정 동선</option>
+      </select>
+    </div>
+    <div id="map" class="w-full rounded-2xl border border-rose-100 shadow-sm" style="height:70vh;min-height:420px;"></div>
+    <p class="text-[11px] text-slate-400 mt-2">
+      번호는 일정 순서, 점선은 이동 동선입니다. 일정표에서 순서를 바꾸면 지도도 함께 바뀝니다.
+      위치가 지정된 일정만 지도에 표시됩니다.
+    </p>
+  </section>
+
+  <!-- ── AI 추천 탭 ─────────────────────────────────────────── -->
+  <section id="panel-ai" class="tab-panel hidden">
+    <div class="bg-white rounded-2xl border border-rose-100 shadow-sm flex flex-col" style="height:72vh;min-height:460px;">
+      <div class="px-4 py-3 border-b border-rose-100 flex items-center gap-2 flex-wrap">
+        <span class="text-sm font-bold text-slate-700">✨ AI 여행 추천 챗봇</span>
+        <div class="ml-auto flex gap-1">
+          <button class="quick-chip" data-q="맛집">🍜 맛집</button>
+          <button class="quick-chip" data-q="명소">📸 명소</button>
+          <button class="quick-chip" data-q="쇼핑">🛍 쇼핑</button>
+        </div>
+      </div>
+      <div id="chat-log" class="flex-1 overflow-y-auto px-4 py-4 space-y-3 text-sm"></div>
+      <div class="px-3 py-3 border-t border-rose-100">
+        <div id="chat-nokey" class="hidden text-[11px] text-amber-600 mb-2">
+          ⚠️ AI 추천을 쓰려면 <b>설정 ⚙️</b>에서 Claude API 키를 먼저 입력하세요.
+        </div>
+        <form id="chat-form" class="flex gap-2">
+          <input id="chat-input" type="text" autocomplete="off"
+            placeholder="예: 로마에서 커플이 가기 좋은 야경 명소 추천해줘"
+            class="flex-1 text-sm px-3 py-2.5 rounded-xl border border-slate-200 focus:border-rose-400 focus:ring-1 focus:ring-rose-200 outline-none"/>
+          <button type="submit" id="chat-send"
+            class="px-4 py-2.5 rounded-xl bg-rose-500 hover:bg-rose-600 text-white text-sm font-semibold transition">
+            보내기
+          </button>
+        </form>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- ── 설정 모달 ────────────────────────────────────────────── -->
+<div id="settings-modal" class="hidden fixed inset-0 z-[2000] bg-black/40 flex items-center justify-center p-4">
+  <div class="bg-white rounded-2xl shadow-xl w-full max-w-md p-5">
+    <div class="flex items-center justify-between mb-3">
+      <h3 class="font-bold text-slate-800">⚙️ 설정</h3>
+      <button id="settings-close" class="text-slate-400 hover:text-slate-600 text-xl leading-none">&times;</button>
+    </div>
+    <label class="block text-xs font-medium text-slate-600 mb-1">Claude API 키</label>
+    <input id="settings-apikey" type="password" placeholder="sk-ant-..."
+      class="w-full text-sm px-3 py-2 rounded-lg border border-slate-200 focus:border-rose-400 outline-none mb-1"/>
+    <p class="text-[11px] text-slate-400 mb-3 leading-relaxed">
+      키는 <b>이 브라우저에만</b> 저장되며 서버로 전송되지 않습니다.
+      <a href="https://console.anthropic.com/settings/keys" target="_blank" class="text-rose-500 underline">키 발급 →</a>
+    </p>
+    <label class="block text-xs font-medium text-slate-600 mb-1">모델 (선택)</label>
+    <input id="settings-model" type="text" placeholder="claude-opus-4-8"
+      class="w-full text-sm px-3 py-2 rounded-lg border border-slate-200 focus:border-rose-400 outline-none mb-3"/>
+    <label class="flex items-center gap-2 mb-4 text-xs text-slate-600">
+      <input id="settings-websearch" type="checkbox" class="rounded"/>
+      실시간 웹 검색 사용 (최신 맛집·명소 정보 확인)
+    </label>
+    <button id="settings-save"
+      class="w-full py-2.5 rounded-lg bg-rose-500 hover:bg-rose-600 text-white text-sm font-semibold transition">
+      저장
+    </button>
+  </div>
+</div>
+
+<!-- ── 일정 편집 모달 ───────────────────────────────────────── -->
+<div id="item-modal" class="hidden fixed inset-0 z-[2000] bg-black/40 flex items-center justify-center p-4">
+  <div class="bg-white rounded-2xl shadow-xl w-full max-w-lg p-5 max-h-[90vh] overflow-y-auto">
+    <div class="flex items-center justify-between mb-3">
+      <h3 id="item-modal-title" class="font-bold text-slate-800">일정 추가</h3>
+      <button id="item-close" class="text-slate-400 hover:text-slate-600 text-xl leading-none">&times;</button>
+    </div>
+
+    <div class="grid grid-cols-3 gap-2 mb-3">
+      <label class="flex flex-col gap-1 col-span-1">
+        <span class="text-[11px] text-slate-500">시간</span>
+        <input id="item-time" type="time"
+          class="text-sm px-2 py-2 rounded-lg border border-slate-200 outline-none"/>
+      </label>
+      <label class="flex flex-col gap-1 col-span-2">
+        <span class="text-[11px] text-slate-500">테마</span>
+        <select id="item-category" class="text-sm px-2 py-2 rounded-lg border border-slate-200 outline-none">
+          <option value="sight">📸 명소</option>
+          <option value="food">🍜 맛집</option>
+          <option value="shopping">🛍 쇼핑</option>
+          <option value="hotel">🏨 숙소</option>
+          <option value="transport">🚕 이동</option>
+          <option value="etc">📌 기타</option>
+        </select>
+      </label>
+    </div>
+
+    <label class="flex flex-col gap-1 mb-3">
+      <span class="text-[11px] text-slate-500">제목</span>
+      <input id="item-title" type="text" placeholder="예: 콜로세움 관람"
+        class="text-sm px-3 py-2 rounded-lg border border-slate-200 outline-none"/>
+    </label>
+
+    <!-- 위치 검색 -->
+    <div class="mb-3">
+      <span class="text-[11px] text-slate-500">위치 (지도 동선용)</span>
+      <div class="flex gap-2 mt-1">
+        <input id="item-place-query" type="text" placeholder="장소명·주소 검색 후 선택"
+          class="flex-1 text-sm px-3 py-2 rounded-lg border border-slate-200 outline-none"/>
+        <button id="item-place-search" type="button"
+          class="px-3 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 text-sm font-medium">🔍</button>
+      </div>
+      <div id="item-place-results" class="mt-1 space-y-1"></div>
+      <div id="item-place-chosen" class="hidden mt-1 text-[11px] text-emerald-600"></div>
+    </div>
+
+    <label class="flex flex-col gap-1 mb-3">
+      <span class="text-[11px] text-slate-500">메모</span>
+      <textarea id="item-notes" rows="2" placeholder="예약번호, 팁, 주의사항 등"
+        class="text-sm px-3 py-2 rounded-lg border border-slate-200 outline-none resize-none"></textarea>
+    </label>
+
+    <!-- 첨부파일 -->
+    <div class="mb-4">
+      <div class="flex items-center justify-between mb-1">
+        <span class="text-[11px] text-slate-500">첨부 (바우처·사진·PDF)</span>
+        <label class="text-[11px] text-rose-500 font-medium cursor-pointer hover:underline">
+          + 파일 추가
+          <input id="item-file-input" type="file" multiple accept="image/*,application/pdf" class="hidden"/>
+        </label>
+      </div>
+      <div id="item-attachments" class="space-y-1"></div>
+    </div>
+
+    <div class="flex gap-2">
+      <button id="item-delete" class="hidden px-3 py-2.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-500 text-sm font-medium">삭제</button>
+      <button id="item-save"
+        class="flex-1 py-2.5 rounded-lg bg-rose-500 hover:bg-rose-600 text-white text-sm font-semibold transition">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── 첨부 미리보기 모달 ───────────────────────────────────── -->
+<div id="preview-modal" class="hidden fixed inset-0 z-[2100] bg-black/70 flex items-center justify-center p-4" onclick="this.classList.add('hidden')">
+  <div id="preview-content" class="max-w-3xl max-h-[90vh] overflow-auto"></div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+<script src="store.js"></script>
+<script src="map.js"></script>
+<script src="ai.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
