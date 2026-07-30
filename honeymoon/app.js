@@ -163,6 +163,132 @@
     save(); renderItinerary();
   });
 
+  // ── 항공권 사진/PDF → 자동 일정 추가 (멀티모달) ─────────────
+  $('#btn-add-flight').addEventListener('click', () => {
+    if (!AI.hasKey()) {
+      alert('항공권 자동입력은 AI 기능이라 Claude API 키가 필요해요. 설정에서 키를 입력해 주세요.');
+      openSettings();
+      return;
+    }
+    $('#flight-file-input').click();
+  });
+  $('#flight-file-input').addEventListener('change', async e => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (file) await handleFlightPhoto(file);
+  });
+
+  async function handleFlightPhoto(file) {
+    const busy = showBusy('✈️ 항공권을 분석하고 있어요...');
+    try {
+      const { flights } = await AI.extractFlight(file);
+      if (!flights.length) {
+        alert('항공권 정보를 찾지 못했어요. 더 선명한 사진이나 e-티켓 PDF로 다시 시도해 주세요.');
+        return;
+      }
+      let added = 0;
+      for (const f of flights) {
+        const it = await createFlightItem(f, file);
+        if (it) added++;
+      }
+      save();
+      renderItinerary();
+      setTab('itinerary');
+      alert(`✈️ 항공편 ${added}건을 일정에 추가했어요!\n시간·위치를 확인하고 필요하면 수정해 주세요.`);
+    } catch (err) {
+      if (err.message === 'NO_KEY' || err.message === 'AUTH') {
+        alert('API 키가 없거나 올바르지 않아요. 설정에서 확인해 주세요.');
+        openSettings();
+      } else {
+        alert('분석 실패: ' + err.message);
+      }
+    } finally {
+      hideBusy(busy);
+    }
+  }
+
+  async function createFlightItem(f, file) {
+    const date = normDate(f.depDate);
+    // 같은 날짜의 DAY가 있으면 재사용, 없으면 새로 생성
+    let day = date ? trip.days.find(d => d.date === date) : null;
+    if (!day) {
+      day = { id: Store.uid(), date: date || '', label: f.depCity || '', items: [] };
+      trip.days.push(day);
+    } else if (!day.label && f.depCity) {
+      day.label = f.depCity;
+    }
+
+    const dep = (f.depAirport || f.depCity || '').trim();
+    const arr = (f.arrAirport || f.arrCity || '').trim();
+    const head = ['✈️', f.airline, f.flightNo].filter(Boolean).join(' ').trim();
+    const route = (dep || arr) ? `${dep} → ${arr}` : '';
+    const item = {
+      id: Store.uid(),
+      category: 'transport',
+      time: normTime(f.depTime),
+      title: [head, route].filter(Boolean).join('  ') || '✈️ 항공편',
+      place: dep,
+      notes: buildFlightNotes(f),
+      attachments: [],
+    };
+    day.items.push(item);
+
+    // 출발 공항 지오코딩 (best-effort)
+    try {
+      const q = f.depAirport || (f.depCity ? f.depCity + ' 공항' : '');
+      if (q) {
+        const r = await HMap.geocode(q + ' airport');
+        if (r && r.length) {
+          item.lat = r[0].lat; item.lng = r[0].lng;
+          if (!item.place) item.place = r[0].name;
+        }
+      }
+    } catch { /* 지오코딩 실패는 무시 */ }
+
+    // 원본 항공권 파일 첨부
+    try {
+      await Store.putAttachment(item.id, file);
+      item.attachments = await Store.listAttachments(item.id);
+    } catch { /* 첨부 실패는 무시 */ }
+
+    return item;
+  }
+
+  function buildFlightNotes(f) {
+    const lines = [];
+    const arrLine = [f.arrDate, f.arrTime].filter(Boolean).join(' ');
+    const arrPlace = f.arrAirport || f.arrCity || '';
+    if (arrLine || arrPlace) lines.push(`도착: ${[arrLine, arrPlace].filter(Boolean).join(' ')}`.trim());
+    if (f.seat) lines.push(`좌석: ${f.seat}`);
+    if (f.booking) lines.push(`예약번호: ${f.booking}`);
+    return lines.join('\n');
+  }
+
+  function normDate(s) {
+    if (!s) return '';
+    const m = String(s).match(/(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
+    return m ? `${m[1]}-${String(m[2]).padStart(2, '0')}-${String(m[3]).padStart(2, '0')}` : '';
+  }
+  function normTime(s) {
+    if (!s) return '';
+    const m = String(s).match(/(\d{1,2}):(\d{2})/);
+    return m ? `${String(m[1]).padStart(2, '0')}:${m[2]}` : '';
+  }
+
+  // 전체 화면 로딩 오버레이
+  function showBusy(msg) {
+    const el = document.createElement('div');
+    el.className = 'fixed inset-0 z-[2200] bg-black/40 flex items-center justify-center';
+    el.innerHTML =
+      `<div class="bg-white rounded-xl px-5 py-4 shadow-lg text-sm text-slate-700 flex items-center gap-3">
+        <span class="typing"><span></span><span></span><span></span></span>
+        <span>${esc(msg)}</span>
+      </div>`;
+    document.body.appendChild(el);
+    return el;
+  }
+  function hideBusy(el) { if (el) el.remove(); }
+
   // ════════════════════════════════════════════════════════════
   //  일정 편집 모달
   // ════════════════════════════════════════════════════════════

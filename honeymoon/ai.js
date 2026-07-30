@@ -78,5 +78,92 @@ const AI = (() => {
 
   function hasKey() { return !!Store.loadSettings().apiKey; }
 
-  return { ask, hasKey, MODEL };
+  // ── 파일 → base64 (data URL 접두어 제거) ──────────────────────
+  function fileToBase64(file) {
+    return new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(String(r.result).split(',')[1] || '');
+      r.onerror = () => reject(r.error);
+      r.readAsDataURL(file);
+    });
+  }
+
+  // ── 관대한 JSON 파서 (코드펜스/앞뒤 텍스트 제거) ─────────────
+  function parseJsonLoose(t) {
+    if (!t) return null;
+    let s = t.replace(/```json/gi, '').replace(/```/g, '').trim();
+    try { return JSON.parse(s); } catch {}
+    const m = s.match(/\{[\s\S]*\}/);
+    if (m) { try { return JSON.parse(m[0]); } catch {} }
+    return null;
+  }
+
+  // ── 항공권 사진/PDF → 항공편 정보 추출 (멀티모달 비전) ───────
+  async function extractFlight(file) {
+    const settings = Store.loadSettings();
+    const apiKey = settings.apiKey;
+    if (!apiKey) throw new Error('NO_KEY');
+
+    const b64 = await fileToBase64(file);
+    const isPdf = (file.type || '').includes('pdf');
+    const mediaBlock = isPdf
+      ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: b64 } }
+      : { type: 'image', source: { type: 'base64', media_type: file.type || 'image/jpeg', data: b64 } };
+
+    const instruction = [
+      '첨부한 이미지/문서는 항공권(e-티켓 / 탑승권 / 예약확인서)입니다. 항공편 정보를 추출하세요.',
+      '아래 JSON 형식으로만 답하세요. 설명 문장이나 코드펜스 없이 순수 JSON만 출력합니다.',
+      '{',
+      '  "flights": [',
+      '    {',
+      '      "airline": "항공사명(한글 우선, 없으면 코드)",',
+      '      "flightNo": "편명 (예: KE931)",',
+      '      "depCity": "출발 도시",',
+      '      "depAirport": "출발 공항명 또는 코드 (예: 인천 ICN)",',
+      '      "arrCity": "도착 도시",',
+      '      "arrAirport": "도착 공항명 또는 코드 (예: 로마 FCO)",',
+      '      "depDate": "YYYY-MM-DD (연도가 안 보이면 빈 문자열)",',
+      '      "depTime": "HH:MM 24시간 (없으면 빈 문자열)",',
+      '      "arrDate": "YYYY-MM-DD 또는 빈 문자열",',
+      '      "arrTime": "HH:MM 또는 빈 문자열",',
+      '      "seat": "좌석 또는 빈 문자열",',
+      '      "booking": "예약번호(PNR) 또는 빈 문자열"',
+      '    }',
+      '  ]',
+      '}',
+      '항공권이 아니거나 정보를 찾지 못하면 {"flights": []} 를 반환하세요.',
+      '왕복·경유 등 여러 구간이면 각 구간을 배열에 순서대로 넣으세요.',
+    ].join('\n');
+
+    const body = {
+      model: settings.model || MODEL,
+      max_tokens: 1024,
+      messages: [{ role: 'user', content: [ mediaBlock, { type: 'text', text: instruction } ] }],
+    };
+
+    const res = await fetch(API_URL, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+      },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      let detail = '';
+      try { detail = (await res.json())?.error?.message || ''; } catch {}
+      if (res.status === 401) throw new Error('AUTH');
+      throw new Error(`API 오류 ${res.status}: ${detail}`);
+    }
+    const data = await res.json();
+    const text = (data.content || [])
+      .filter(b => b.type === 'text').map(b => b.text).join('\n').trim();
+    const json = parseJsonLoose(text);
+    if (!json || !Array.isArray(json.flights)) return { flights: [] };
+    return json;
+  }
+
+  return { ask, hasKey, extractFlight, MODEL };
 })();
