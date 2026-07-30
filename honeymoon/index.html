@@ -62,14 +62,24 @@
 
   <!-- ── 일정표 탭 ──────────────────────────────────────────── -->
   <section id="panel-itinerary" class="tab-panel">
-    <div class="flex items-center justify-between mb-3">
+    <div class="flex items-center justify-between mb-3 gap-2 flex-wrap">
       <h2 class="text-sm font-bold text-slate-700">🗓 일정표</h2>
-      <button id="btn-add-day"
-        class="text-xs px-3 py-1.5 rounded-lg bg-rose-500 hover:bg-rose-600 text-white font-semibold transition">
-        + 날짜(DAY) 추가
-      </button>
+      <div class="flex gap-2">
+        <button id="btn-add-flight"
+          class="text-xs px-3 py-1.5 rounded-lg bg-sky-500 hover:bg-sky-600 text-white font-semibold transition">
+          ✈️ 항공권 자동입력
+        </button>
+        <input id="flight-file-input" type="file" accept="image/*,application/pdf" class="hidden"/>
+        <button id="btn-add-day"
+          class="text-xs px-3 py-1.5 rounded-lg bg-rose-500 hover:bg-rose-600 text-white font-semibold transition">
+          + 날짜(DAY) 추가
+        </button>
+      </div>
     </div>
-    <p class="text-[11px] text-slate-400 mb-3">일정 카드를 드래그해서 순서를 바꿀 수 있어요. 순서는 지도 동선에 그대로 반영됩니다.</p>
+    <p class="text-[11px] text-slate-400 mb-3">
+      일정 카드를 드래그해서 순서를 바꿀 수 있어요. 순서는 지도 동선에 그대로 반영됩니다.
+      <b class="text-sky-600">✈️ 항공권 사진/PDF</b>를 올리면 AI가 항공편 일정을 자동으로 만들어 줘요.
+    </p>
     <div id="days-container" class="space-y-4"></div>
     <div id="itinerary-empty" class="hidden text-center text-slate-400 text-sm py-16">
       아직 일정이 없어요. <b>+ 날짜 추가</b>로 첫 날을 만들어 보세요.
