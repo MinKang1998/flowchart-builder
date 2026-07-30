@@ -99,12 +99,16 @@
     row.dataset.day = day.id;
     const hasLoc = typeof item.lat === 'number';
     const attCount = (item.attachments || []).length;
+    const titleStr = item.title || '(제목 없음)';
+    // 제목이 이미 이모지로 시작하면(자동입력 항목) 카테고리 이모지 중복 표시 방지
+    const startsWithEmoji = /^\p{Extended_Pictographic}/u.test(titleStr);
+    const emojiPrefix = startsWithEmoji ? '' : c.emoji + ' ';
     row.innerHTML = `
       <span class="drag-handle cursor-grab text-slate-300 hover:text-slate-500 select-none px-1" title="드래그로 순서변경">⠿</span>
       <span class="text-xs text-slate-400 w-11 tabular-nums">${esc(item.time || '––:––')}</span>
       <span class="w-2 h-2 rounded-full shrink-0" style="background:${catColor(item.category)}"></span>
       <span class="flex-1 min-w-0">
-        <span class="text-sm text-slate-700 truncate block">${c.emoji} ${esc(item.title || '(제목 없음)')}</span>
+        <span class="text-sm text-slate-700 truncate block">${emojiPrefix}${esc(titleStr)}</span>
         ${item.place ? `<span class="text-[11px] text-slate-400 truncate block">📍 ${esc(item.place)}</span>` : ''}
       </span>
       ${hasLoc ? '<span class="text-[10px] text-emerald-500" title="지도 표시됨">지도</span>' : ''}
@@ -163,81 +167,114 @@
     save(); renderItinerary();
   });
 
-  // ── 항공권 사진/PDF → 자동 일정 추가 (멀티모달) ─────────────
+  // ── 예약·바우처·항공권 사진/PDF → 자동 일정 추가 (멀티모달) ───
+  const VALID_CATS = ['transport', 'hotel', 'food', 'sight', 'shopping', 'etc'];
+
+  function needKeyOrPrompt() {
+    if (AI.hasKey()) return true;
+    alert('예약·바우처 자동입력은 AI 기능이라 Claude API 키가 필요해요. 설정에서 키를 입력해 주세요.');
+    openSettings();
+    return false;
+  }
+
   $('#btn-add-flight').addEventListener('click', () => {
-    if (!AI.hasKey()) {
-      alert('항공권 자동입력은 AI 기능이라 Claude API 키가 필요해요. 설정에서 키를 입력해 주세요.');
-      openSettings();
-      return;
-    }
+    if (!needKeyOrPrompt()) return;
     $('#flight-file-input').click();
   });
   $('#flight-file-input').addEventListener('change', async e => {
-    const file = e.target.files && e.target.files[0];
+    const files = Array.from(e.target.files || []);
     e.target.value = '';
-    if (file) await handleFlightPhoto(file);
+    if (files.length) await handleDocFiles(files);
   });
 
-  async function handleFlightPhoto(file) {
-    const busy = showBusy('✈️ 항공권을 분석하고 있어요...');
+  // 드래그앤드롭 영역
+  const dropZone = $('#drop-zone');
+  if (dropZone) {
+    dropZone.addEventListener('click', () => { if (needKeyOrPrompt()) $('#flight-file-input').click(); });
+    ['dragenter', 'dragover'].forEach(ev => dropZone.addEventListener(ev, e => {
+      e.preventDefault(); e.stopPropagation();
+      dropZone.classList.add('border-sky-500', 'bg-sky-100');
+    }));
+    ['dragleave', 'dragend'].forEach(ev => dropZone.addEventListener(ev, e => {
+      e.preventDefault(); e.stopPropagation();
+      dropZone.classList.remove('border-sky-500', 'bg-sky-100');
+    }));
+    dropZone.addEventListener('drop', async e => {
+      e.preventDefault(); e.stopPropagation();
+      dropZone.classList.remove('border-sky-500', 'bg-sky-100');
+      const files = Array.from(e.dataTransfer?.files || [])
+        .filter(f => /^image\//.test(f.type) || f.type === 'application/pdf');
+      if (!files.length) { alert('이미지 또는 PDF 파일만 올릴 수 있어요.'); return; }
+      if (!needKeyOrPrompt()) return;
+      await handleDocFiles(files);
+    });
+  }
+
+  async function handleDocFiles(files) {
+    const busy = showBusy(`📄 예약 자료 ${files.length}개를 분석하고 있어요...`);
+    let added = 0, failed = 0, none = 0;
     try {
-      const { flights } = await AI.extractFlight(file);
-      if (!flights.length) {
-        alert('항공권 정보를 찾지 못했어요. 더 선명한 사진이나 e-티켓 PDF로 다시 시도해 주세요.');
-        return;
-      }
-      let added = 0;
-      for (const f of flights) {
-        const it = await createFlightItem(f, file);
-        if (it) added++;
+      for (const file of files) {
+        try {
+          const { entries } = await AI.extractReservation(file);
+          if (!entries.length) { none++; continue; }
+          for (const en of entries) {
+            const it = await createEntryItem(en, file);
+            if (it) added++;
+          }
+        } catch (err) {
+          if (err.message === 'NO_KEY' || err.message === 'AUTH') throw err;
+          failed++;
+        }
       }
       save();
       renderItinerary();
       setTab('itinerary');
-      alert(`✈️ 항공편 ${added}건을 일정에 추가했어요!\n시간·위치를 확인하고 필요하면 수정해 주세요.`);
+      const msgs = [];
+      if (added) msgs.push(`✅ 일정 ${added}건을 추가했어요! 시간·위치를 확인해 주세요.`);
+      if (none)  msgs.push(`ℹ️ ${none}개 파일에서는 예약 정보를 찾지 못했어요.`);
+      if (failed) msgs.push(`⚠️ ${failed}개 파일 분석에 실패했어요.`);
+      alert(msgs.join('\n') || '추가된 일정이 없어요.');
     } catch (err) {
-      if (err.message === 'NO_KEY' || err.message === 'AUTH') {
-        alert('API 키가 없거나 올바르지 않아요. 설정에서 확인해 주세요.');
-        openSettings();
-      } else {
-        alert('분석 실패: ' + err.message);
-      }
+      alert('API 키가 없거나 올바르지 않아요. 설정에서 확인해 주세요.');
+      openSettings();
     } finally {
       hideBusy(busy);
     }
   }
 
-  async function createFlightItem(f, file) {
-    const date = normDate(f.depDate);
+  async function createEntryItem(en, file) {
+    const date = normDate(en.date);
     // 같은 날짜의 DAY가 있으면 재사용, 없으면 새로 생성
     let day = date ? trip.days.find(d => d.date === date) : null;
     if (!day) {
-      day = { id: Store.uid(), date: date || '', label: f.depCity || '', items: [] };
+      day = { id: Store.uid(), date: date || '', label: en.city || '', items: [] };
       trip.days.push(day);
-    } else if (!day.label && f.depCity) {
-      day.label = f.depCity;
+    } else if (!day.label && en.city) {
+      day.label = en.city;
     }
 
-    const dep = (f.depAirport || f.depCity || '').trim();
-    const arr = (f.arrAirport || f.arrCity || '').trim();
-    const head = ['✈️', f.airline, f.flightNo].filter(Boolean).join(' ').trim();
-    const route = (dep || arr) ? `${dep} → ${arr}` : '';
+    const category = VALID_CATS.includes(en.category) ? en.category : 'etc';
+    const notes = (en.notes || '').trim();
+    const conf  = (en.confirmation || '').trim();
+    const fullNotes = [notes, conf ? `예약번호: ${conf}` : ''].filter(Boolean).join('\n');
+
     const item = {
       id: Store.uid(),
-      category: 'transport',
-      time: normTime(f.depTime),
-      title: [head, route].filter(Boolean).join('  ') || '✈️ 항공편',
-      place: dep,
-      notes: buildFlightNotes(f),
+      category,
+      time: normTime(en.time),
+      title: (en.title || '').trim() || '(예약)',
+      place: (en.place || en.city || '').trim(),
+      notes: fullNotes,
       attachments: [],
     };
     day.items.push(item);
 
-    // 출발 공항 지오코딩 (best-effort)
+    // 장소 지오코딩 (best-effort)
     try {
-      const q = f.depAirport || (f.depCity ? f.depCity + ' 공항' : '');
+      const q = (en.place || '').trim() || (en.city ? en.city.trim() : '');
       if (q) {
-        const r = await HMap.geocode(q + ' airport');
+        const r = await HMap.geocode(q);
         if (r && r.length) {
           item.lat = r[0].lat; item.lng = r[0].lng;
           if (!item.place) item.place = r[0].name;
@@ -245,23 +282,13 @@
       }
     } catch { /* 지오코딩 실패는 무시 */ }
 
-    // 원본 항공권 파일 첨부
+    // 원본 예약 파일 첨부
     try {
       await Store.putAttachment(item.id, file);
       item.attachments = await Store.listAttachments(item.id);
     } catch { /* 첨부 실패는 무시 */ }
 
     return item;
-  }
-
-  function buildFlightNotes(f) {
-    const lines = [];
-    const arrLine = [f.arrDate, f.arrTime].filter(Boolean).join(' ');
-    const arrPlace = f.arrAirport || f.arrCity || '';
-    if (arrLine || arrPlace) lines.push(`도착: ${[arrLine, arrPlace].filter(Boolean).join(' ')}`.trim());
-    if (f.seat) lines.push(`좌석: ${f.seat}`);
-    if (f.booking) lines.push(`예약번호: ${f.booking}`);
-    return lines.join('\n');
   }
 
   function normDate(s) {

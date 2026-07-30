@@ -7,7 +7,7 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
         integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
-  <link rel="stylesheet" href="style.css"/>
+  <link rel="stylesheet" href="style.css?v=3"/>
 </head>
 <body class="bg-rose-50 min-h-screen text-slate-800">
 
@@ -67,19 +67,24 @@
       <div class="flex gap-2">
         <button id="btn-add-flight"
           class="text-xs px-3 py-1.5 rounded-lg bg-sky-500 hover:bg-sky-600 text-white font-semibold transition">
-          ✈️ 항공권 자동입력
+          📄 예약·바우처 자동입력
         </button>
-        <input id="flight-file-input" type="file" accept="image/*,application/pdf" class="hidden"/>
+        <input id="flight-file-input" type="file" accept="image/*,application/pdf" multiple class="hidden"/>
         <button id="btn-add-day"
           class="text-xs px-3 py-1.5 rounded-lg bg-rose-500 hover:bg-rose-600 text-white font-semibold transition">
           + 날짜(DAY) 추가
         </button>
       </div>
     </div>
-    <p class="text-[11px] text-slate-400 mb-3">
+    <p class="text-[11px] text-slate-400 mb-2">
       일정 카드를 드래그해서 순서를 바꿀 수 있어요. 순서는 지도 동선에 그대로 반영됩니다.
-      <b class="text-sky-600">✈️ 항공권 사진/PDF</b>를 올리면 AI가 항공편 일정을 자동으로 만들어 줘요.
     </p>
+    <!-- 드래그앤드롭 영역 -->
+    <div id="drop-zone"
+      class="mb-4 border-2 border-dashed border-sky-200 rounded-xl px-4 py-5 text-center text-xs text-slate-500 bg-sky-50/40 transition cursor-pointer">
+      📎 <b class="text-sky-600">항공권 · 예약확인서 · 바우처</b>(사진/PDF)를 여기에 끌어다 놓거나 클릭하면<br class="hidden sm:block"/>
+      AI가 항공편·숙소·맛집·투어 일정으로 자동 정리해 줘요. <span class="text-slate-400">(여러 개 한꺼번에 가능)</span>
+    </div>
     <div id="days-container" class="space-y-4"></div>
     <div id="itinerary-empty" class="hidden text-center text-slate-400 text-sm py-16">
       아직 일정이 없어요. <b>+ 날짜 추가</b>로 첫 날을 만들어 보세요.
@@ -250,9 +255,9 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
         integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
-<script src="store.js"></script>
-<script src="map.js"></script>
-<script src="ai.js"></script>
-<script src="app.js"></script>
+<script src="store.js?v=3"></script>
+<script src="map.js?v=3"></script>
+<script src="ai.js?v=3"></script>
+<script src="app.js?v=3"></script>
 </body>
 </html>
