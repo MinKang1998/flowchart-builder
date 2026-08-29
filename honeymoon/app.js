@@ -59,9 +59,21 @@
   }
 
   // ════════════════════════════════════════════════════════════
-  //  일정표 렌더링
+  //  일정표 렌더링 — 시간표(가로: 날짜, 세로: 30분 단위) 그리드
   // ════════════════════════════════════════════════════════════
   const WEEKDAY = ['일', '월', '화', '수', '목', '금', '토'];
+  const SLOT_COUNT = 48; // 00:00~23:30, 30분 단위
+
+  function slotIndex(time) {
+    if (!/^\d{2}:\d{2}$/.test(time || '')) return -1; // 시간 미정
+    const [h, m] = time.split(':').map(Number);
+    return Math.min(SLOT_COUNT - 1, h * 2 + (m >= 30 ? 1 : 0));
+  }
+  function slotLabel(i) {
+    const h = String(Math.floor(i / 2)).padStart(2, '0');
+    const m = i % 2 === 0 ? '00' : '30';
+    return `${h}:${m}`;
+  }
 
   function renderItinerary() {
     sortTrip();
@@ -69,101 +81,116 @@
     const wrap = $('#days-container');
     wrap.innerHTML = '';
     $('#itinerary-empty').classList.toggle('hidden', trip.days.length > 0);
+    if (!trip.days.length) return;
 
-    trip.days.forEach((day, di) => {
-      const group = document.createElement('div');
-      group.className = 'day-group border-b border-rose-100 last:border-b-0';
+    // DAY별 30분 슬롯에 항목 배치, 시간 미정 항목은 별도 버킷
+    const byDay = trip.days.map(day => {
+      const slots = Array.from({ length: SLOT_COUNT }, () => []);
+      const unscheduled = [];
+      day.items.forEach(item => {
+        const si = slotIndex(item.time);
+        (si === -1 ? unscheduled : slots[si]).push(item);
+      });
+      return { day, slots, unscheduled };
+    });
 
+    const table = document.createElement('table');
+    table.className = 'w-full border-collapse text-xs';
+
+    // ── 헤더: 날짜가 가로로 나열 ──
+    const thead = document.createElement('thead');
+    const headRow = document.createElement('tr');
+    headRow.innerHTML =
+      `<th class="sticky top-0 left-0 z-30 bg-slate-100 border border-slate-200 w-14 min-w-[56px] text-[10px] text-slate-400">시간</th>`;
+    byDay.forEach(({ day }, di) => {
       let dateBig = '', dow = '';
       if (/^\d{4}-\d{2}-\d{2}$/.test(day.date)) {
         const [y, m, d] = day.date.split('-').map(Number);
         dateBig = `${m}/${d}`;
         dow = WEEKDAY[new Date(y, m - 1, d).getDay()];
       }
-
-      group.innerHTML = `
-        <div class="flex items-center gap-2 px-4 py-2.5 bg-rose-50/70 border-b border-rose-100">
-          <span class="text-[11px] font-bold text-rose-400 shrink-0">DAY ${di + 1}</span>
-          <span class="text-base font-extrabold text-slate-800 shrink-0 tabular-nums">
-            ${esc(dateBig)}${dow ? `<span class="text-xs font-medium text-slate-400 ml-0.5">(${dow})</span>` : ''}
-          </span>
-          <input type="date" value="${esc(day.date || '')}" data-day="${day.id}"
-            class="day-date text-[11px] px-1.5 py-1 rounded border border-slate-200 bg-white outline-none w-[128px] shrink-0"/>
-          <input type="text" value="${esc(day.label || '')}" placeholder="도시"
-            data-day="${day.id}"
-            class="day-label flex-1 min-w-0 text-sm px-2 py-1 rounded border border-transparent hover:border-slate-200 focus:border-rose-300 outline-none font-semibold text-slate-600"/>
-          <button class="day-del text-slate-300 hover:text-red-500 text-lg leading-none px-1 shrink-0" data-day="${day.id}" title="날짜 삭제">&times;</button>
+      const th = document.createElement('th');
+      th.className = 'sticky top-0 z-20 bg-rose-50 border border-rose-100 align-top px-1 py-1.5 w-[130px] min-w-[130px] font-normal';
+      th.innerHTML = `
+        <div class="flex items-center justify-between">
+          <span class="text-[10px] font-bold text-rose-400">DAY ${di + 1}</span>
+          <button class="day-del text-slate-300 hover:text-red-500 text-sm leading-none px-1" data-day="${day.id}" title="날짜 삭제">&times;</button>
         </div>
-        <div class="items-list divide-y divide-slate-100" data-day="${day.id}"></div>
-        <button class="add-item w-full text-left text-xs text-rose-500 hover:bg-rose-50 py-2 px-4 font-medium transition" data-day="${day.id}">
-          + 일정 추가
-        </button>`;
-      wrap.appendChild(group);
-
-      const list = $('.items-list', group);
-      if (!day.items.length) {
-        list.innerHTML = `<div class="px-4 py-3 text-xs text-slate-300">일정을 추가해 보세요</div>`;
-      }
-      day.items.forEach(item => list.appendChild(renderItemRow(day, item)));
-
-      // 드래그 정렬
-      new Sortable(list, {
-        group: 'items',
-        handle: '.drag-handle',
-        animation: 150,
-        onEnd: onSortEnd,
-      });
+        <div class="text-sm font-extrabold text-slate-800 tabular-nums text-left">
+          ${esc(dateBig)}${dow ? ` <span class="text-[10px] font-medium text-slate-400">(${dow})</span>` : ''}
+        </div>
+        <input type="date" value="${esc(day.date || '')}" data-day="${day.id}"
+          class="day-date text-[10px] w-full mt-1 px-1 py-0.5 rounded border border-slate-200 bg-white outline-none"/>
+        <input type="text" value="${esc(day.label || '')}" placeholder="도시" data-day="${day.id}"
+          class="day-label text-[10px] w-full mt-1 px-1 py-0.5 rounded border border-slate-200 outline-none font-semibold text-slate-600"/>`;
+      headRow.appendChild(th);
     });
+    thead.appendChild(headRow);
+    table.appendChild(thead);
+
+    // ── 본문: 30분 단위 세로 슬롯 ──
+    const tbody = document.createElement('tbody');
+
+    // 시간 미정 행 (맨 위)
+    const unsRow = document.createElement('tr');
+    unsRow.innerHTML =
+      `<td class="sticky left-0 z-10 bg-amber-50 border border-slate-200 text-center text-[10px] text-amber-500 font-bold">미정</td>`;
+    byDay.forEach(({ day, unscheduled }) => {
+      const td = document.createElement('td');
+      td.className = 'border border-slate-100 bg-amber-50/40 align-top p-0.5 cursor-pointer hover:bg-amber-50';
+      unscheduled.forEach(item => td.appendChild(renderCellItem(day, item)));
+      td.addEventListener('click', e => {
+        if (e.target.closest('.cell-item')) return;
+        openItemModal(day.id, null, { time: '' });
+      });
+      unsRow.appendChild(td);
+    });
+    tbody.appendChild(unsRow);
+
+    for (let s = 0; s < SLOT_COUNT; s++) {
+      const onHour = s % 2 === 0;
+      const tr = document.createElement('tr');
+      tr.innerHTML =
+        `<td class="sticky left-0 z-10 ${onHour ? 'bg-slate-100 font-bold text-slate-500' : 'bg-slate-50 text-slate-300'} border border-slate-200 text-center text-[10px] tabular-nums">${onHour ? slotLabel(s) : ''}</td>`;
+      byDay.forEach(({ day, slots }) => {
+        const td = document.createElement('td');
+        td.className = `border border-slate-100 align-top p-0.5 cursor-pointer hover:bg-rose-50/50 min-h-[24px] ${onHour ? 'border-t-slate-300' : ''}`;
+        slots[s].forEach(item => td.appendChild(renderCellItem(day, item)));
+        td.addEventListener('click', e => {
+          if (e.target.closest('.cell-item')) return;
+          openItemModal(day.id, null, { time: slotLabel(s) });
+        });
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    }
+    table.appendChild(tbody);
+
+    const scrollWrap = document.createElement('div');
+    scrollWrap.className = 'overflow-auto';
+    scrollWrap.style.maxHeight = '75vh';
+    scrollWrap.appendChild(table);
+    wrap.appendChild(scrollWrap);
   }
 
-  function renderItemRow(day, item) {
+  function renderCellItem(day, item) {
     const c = CAT[item.category] || CAT.etc;
-    const row = document.createElement('div');
-    row.className = 'item-row flex items-stretch gap-2 pl-2.5 pr-3 py-2.5 hover:bg-slate-50 cursor-pointer border-l-4';
-    row.style.borderLeftColor = catColor(item.category);
-    row.dataset.item = item.id;
-    row.dataset.day = day.id;
-    const hasLoc = typeof item.lat === 'number';
-    const attCount = (item.attachments || []).length;
+    const color = catColor(item.category);
+    const el = document.createElement('div');
+    el.className = 'cell-item text-[10px] leading-tight rounded px-1 py-0.5 mb-0.5 truncate border-l-2 hover:opacity-75';
+    el.style.borderLeftColor = color;
+    el.style.background = color + '1c';
+    el.dataset.item = item.id;
+    el.dataset.day = day.id;
     const titleStr = item.title || '(제목 없음)';
-    // 제목이 이미 이모지로 시작하면(자동입력 항목) 카테고리 이모지 중복 표시 방지
     const startsWithEmoji = /^\p{Extended_Pictographic}/u.test(titleStr);
-    const emojiPrefix = startsWithEmoji ? '' : c.emoji + ' ';
-    row.innerHTML = `
-      <span class="drag-handle cursor-grab text-slate-300 hover:text-slate-500 select-none flex items-center px-0.5" title="드래그로 순서변경">⠿</span>
-      <span class="font-mono text-sm font-bold text-slate-500 w-12 flex items-center shrink-0 tabular-nums">${esc(item.time || '--:--')}</span>
-      <span class="flex-1 min-w-0 flex flex-col justify-center py-0.5">
-        <span class="text-sm text-slate-800 truncate">${emojiPrefix}${esc(titleStr)}</span>
-        ${item.place ? `<span class="text-[11px] text-slate-400 truncate">📍 ${esc(item.place)}</span>` : ''}
-      </span>
-      <span class="flex items-center gap-1.5 shrink-0">
-        ${hasLoc ? '<span class="text-[10px] text-emerald-500" title="지도 표시됨">지도</span>' : ''}
-        ${attCount ? `<span class="text-[10px] text-slate-400">📎${attCount}</span>` : ''}
-      </span>`;
-    row.addEventListener('click', e => {
-      if (e.target.closest('.drag-handle')) return;
+    el.textContent = (startsWithEmoji ? '' : c.emoji + ' ') + titleStr;
+    el.title = titleStr + (item.place ? ` · ${item.place}` : '');
+    el.addEventListener('click', e => {
+      e.stopPropagation();
       openItemModal(day.id, item.id);
     });
-    return row;
-  }
-
-  // 드래그 후 데이터 재구성 (날짜 간 이동 포함)
-  function onSortEnd() {
-    const newDays = trip.days.map(d => ({ ...d, items: [] }));
-    const byId = Object.fromEntries(newDays.map(d => [d.id, d]));
-    const itemById = {};
-    trip.days.forEach(d => d.items.forEach(it => { itemById[it.id] = it; }));
-
-    $$('.items-list').forEach(list => {
-      const dayId = list.dataset.day;
-      $$('.item-row', list).forEach(row => {
-        const it = itemById[row.dataset.item];
-        if (it && byId[dayId]) byId[dayId].items.push(it);
-      });
-    });
-    trip.days = newDays;
-    save();
-    renderItinerary();
+    return el;
   }
 
   // 날짜 라벨/날짜/삭제 이벤트 (위임)
@@ -194,10 +221,7 @@
         trip.days = trip.days.filter(d => d.id !== delBtn.dataset.day);
         save(); renderItinerary();
       }
-      return;
     }
-    const addBtn = e.target.closest('.add-item');
-    if (addBtn) openItemModal(addBtn.dataset.day, null);
   });
 
   $('#btn-add-day').addEventListener('click', () => {
@@ -363,13 +387,13 @@
   // ════════════════════════════════════════════════════════════
   let editing = { dayId: null, itemId: null, chosenPlace: null };
 
-  function openItemModal(dayId, itemId) {
+  function openItemModal(dayId, itemId, prefill = {}) {
     editing = { dayId, itemId, chosenPlace: null };
     const day = trip.days.find(d => d.id === dayId);
     const item = itemId ? day.items.find(i => i.id === itemId) : null;
 
     $('#item-modal-title').textContent = item ? '일정 편집' : '일정 추가';
-    $('#item-time').value = item?.time || '';
+    $('#item-time').value = item ? (item.time || '') : (prefill.time ?? '');
     $('#item-category').value = item?.category || 'sight';
     $('#item-title').value = item?.title || '';
     $('#item-notes').value = item?.notes || '';
