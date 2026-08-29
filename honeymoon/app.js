@@ -621,18 +621,19 @@
     alert('저장된 API 키를 이 브라우저에서 삭제했습니다.');
   });
   $('#settings-reset-trip').addEventListener('click', async () => {
-    if (!confirm('정말 모든 일정을 삭제할까요? 되돌릴 수 없어요.')) return;
+    if (!confirm('지금 일정을 지우고 처음 예시 일정으로 되돌릴까요? 되돌릴 수 없어요.')) return;
     for (const day of trip.days) {
       for (const item of day.items) {
         const atts = await Store.listAttachments(item.id);
         for (const a of atts) await Store.deleteAttachment(a.id);
       }
     }
-    trip = Store.emptyTrip();
+    Store.saveTrip(Store.emptyTrip());  // 저장소를 완전히 비움
+    trip = Store.loadTrip();            // 비어있으므로 loadTrip이 자동으로 기본 일정을 다시 채워줌
     save();
     renderItinerary();
     $('#settings-modal').classList.add('hidden');
-    alert('일정을 초기화했어요.');
+    alert('일정을 기본 예시 일정으로 초기화했어요.');
   });
 
   // ════════════════════════════════════════════════════════════
