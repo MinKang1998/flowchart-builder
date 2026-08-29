@@ -238,7 +238,7 @@
 
   async function handleDocFiles(files) {
     const busy = showBusy(`📄 예약 자료 ${files.length}개를 분석하고 있어요...`);
-    let added = 0, failed = 0, none = 0;
+    let added = 0, failed = 0, none = 0, authError = null;
     try {
       for (const file of files) {
         try {
@@ -246,27 +246,31 @@
           if (!entries.length) { none++; continue; }
           for (const en of entries) {
             const it = await createEntryItem(en, file);
-            if (it) added++;
+            // 항목이 생기는 즉시 저장 — 이후 파일에서 오류가 나도
+            // 이미 인식된 일정은 사라지지 않도록 보장
+            if (it) { added++; save(); }
           }
         } catch (err) {
-          if (err.message === 'NO_KEY' || err.message === 'AUTH') throw err;
+          if (err.message === 'NO_KEY' || err.message === 'AUTH') { authError = err; break; }
           failed++;
         }
       }
-      save();
-      renderItinerary();
-      setTab('itinerary');
-      const msgs = [];
-      if (added) msgs.push(`✅ 일정 ${added}건을 추가했어요! 시간·위치를 확인해 주세요.`);
-      if (none)  msgs.push(`ℹ️ ${none}개 파일에서는 예약 정보를 찾지 못했어요.`);
-      if (failed) msgs.push(`⚠️ ${failed}개 파일 분석에 실패했어요.`);
-      alert(msgs.join('\n') || '추가된 일정이 없어요.');
-    } catch (err) {
-      alert('API 키가 없거나 올바르지 않아요. 설정에서 확인해 주세요.');
-      openSettings();
     } finally {
+      renderItinerary();
       hideBusy(busy);
     }
+    setTab('itinerary');
+    if (authError) {
+      alert((added ? `✅ 일정 ${added}건은 저장됐어요.\n` : '') +
+        '⚠️ API 키가 없거나 올바르지 않아요. 설정에서 확인해 주세요.');
+      openSettings();
+      return;
+    }
+    const msgs = [];
+    if (added) msgs.push(`✅ 일정 ${added}건을 추가했어요! 시간·위치를 확인해 주세요.`);
+    if (none)  msgs.push(`ℹ️ ${none}개 파일에서는 예약 정보를 찾지 못했어요.`);
+    if (failed) msgs.push(`⚠️ ${failed}개 파일 분석에 실패했어요.`);
+    alert(msgs.join('\n') || '추가된 일정이 없어요.');
   }
 
   async function createEntryItem(en, file) {
