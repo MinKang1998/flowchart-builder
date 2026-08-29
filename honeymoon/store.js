@@ -28,11 +28,64 @@ const Store = (() => {
     };
   }
 
+  // ── 기본 시드 일정 (저장된 데이터가 전혀 없을 때만 채워짐) ──────
+  //   1/24 LA 도착 → 라스베가스·그랜드캐니언 → 칸쿤 → 뉴욕 → 인천
+  //   연도는 명시되지 않아 다음 1/24(2027년) 기준으로 채움 — DAY의
+  //   날짜 입력칸에서 언제든 수정 가능.
+  function seedTrip() {
+    const mk = (date, label) => ({ id: uid(), date, label, items: [] });
+    const days = [
+      mk('2027-01-24', 'LA'),
+      mk('2027-01-25', '라스베가스'),
+      mk('2027-01-26', '라스베가스'),
+      mk('2027-01-27', '라스베가스'),
+      mk('2027-01-28', '칸쿤'),
+      mk('2027-01-29', '칸쿤'),
+      mk('2027-01-30', '칸쿤'),
+      mk('2027-01-31', '칸쿤'),
+      mk('2027-02-01', '칸쿤'),
+      mk('2027-02-02', '뉴욕'),
+      mk('2027-02-03', '뉴욕'),
+      mk('2027-02-04', '뉴욕'),
+      mk('2027-02-05', '인천'),
+    ];
+    const byDate = d => days.find(x => x.date === d);
+    const addItem = (date, item) => byDate(date).items.push({ id: uid(), attachments: [], ...item });
+
+    addItem('2027-01-24', {
+      time: '08:30', category: 'transport', title: '✈️ LA 도착',
+      place: 'Los Angeles International Airport', lat: 33.9416, lng: -118.4085, notes: '',
+    });
+    addItem('2027-01-26', {
+      time: '', category: 'sight', title: '📸 그랜드캐니언 투어',
+      place: 'Grand Canyon', lat: 36.1069, lng: -112.1129,
+      notes: '라스베가스 기점 당일 투어 — 1/25~27 중 편한 날로 조정하세요',
+    });
+    addItem('2027-01-27', {
+      time: '20:00', category: 'transport', title: '🚕 칸쿤으로 이동',
+      place: '', notes: '1/27 밤 또는 1/28 오전 중 이동 — 항공권 확정되면 날짜·시간을 수정하세요',
+    });
+    addItem('2027-02-01', {
+      time: '20:00', category: 'transport', title: '🚕 뉴욕으로 이동',
+      place: '', notes: '2/1 밤 또는 2/2 오전 중 이동 — 항공권 확정되면 날짜·시간을 수정하세요',
+    });
+    addItem('2027-02-04', {
+      time: '12:00', category: 'transport', title: '✈️ 뉴욕 → 인천',
+      place: 'John F. Kennedy International Airport', lat: 40.6413, lng: -73.7781, notes: '',
+    });
+    addItem('2027-02-05', {
+      time: '17:45', category: 'transport', title: '🛬 인천 도착',
+      place: '인천국제공항', lat: 37.4602, lng: 126.4407, notes: '',
+    });
+
+    return Object.assign(emptyTrip(), { days });
+  }
+
   // ── 여행 데이터 로드/저장 ──────────────────────────────────────
   function loadTrip() {
     try {
       const raw = localStorage.getItem(TRIP_KEY);
-      if (!raw) return emptyTrip();
+      if (!raw) return seedTrip();
       const t = JSON.parse(raw);
       // 최소 필드 보정
       t.days = Array.isArray(t.days) ? t.days : [];
