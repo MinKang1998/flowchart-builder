@@ -87,9 +87,10 @@ const Store = (() => {
   }
 
   // ── 여행 데이터 로드/저장 ──────────────────────────────────────
-  //   저장된 일정이 아예 없거나(raw 없음) DAY가 0개면 항상 기본
-  //   시드를 채운다 — 예전에 빈 상태로 저장된 적이 있어도(예:
-  //   {"days":[]}) 다시 비어있다면 시드가 보이도록 함.
+  //   저장된 일정이 아예 없거나(raw 없음), DAY가 0개거나, 있는
+  //   DAY가 전부 "완전히 빈 껍데기"(날짜·도시·일정 모두 없음)면
+  //   항상 기본 시드를 채운다. "+ 날짜 추가"만 누르고 아무것도
+  //   안 채운 상태로 남아있던 예전 테스트 데이터도 시드가 뜨도록.
   function loadTrip() {
     try {
       const raw = localStorage.getItem(TRIP_KEY);
@@ -98,7 +99,8 @@ const Store = (() => {
       // 최소 필드 보정
       t.days = Array.isArray(t.days) ? t.days : [];
       t.days.forEach(d => { d.items = Array.isArray(d.items) ? d.items : []; });
-      if (t.days.length === 0) return seedTrip();
+      const isBlankDay = d => !d.date && !(d.label || '').trim() && d.items.length === 0;
+      if (t.days.length === 0 || t.days.every(isBlankDay)) return seedTrip();
       return Object.assign(emptyTrip(), t);
     } catch (e) {
       console.warn('여행 데이터 파싱 실패, 기본 일정으로 시작합니다.', e);
