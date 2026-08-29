@@ -21,20 +21,18 @@
   let trip = Store.loadTrip();
   const save = () => Store.saveTrip(trip);
 
+  // 일정표에 이미 적힌 DAY 라벨·날짜로 목적지/기간을 유추 (별도 입력칸 없이)
+  function tripSummary() {
+    const labels = [...new Set(trip.days.map(d => (d.label || '').trim()).filter(Boolean))];
+    const dates = trip.days.map(d => d.date).filter(Boolean).sort();
+    return {
+      destination: labels.join(', '),
+      dateRange: dates.length ? `${dates[0]} ~ ${dates[dates.length - 1]}` : '',
+    };
+  }
+
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
     ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
-
-  // ════════════════════════════════════════════════════════════
-  //  여행 개요 필드
-  // ════════════════════════════════════════════════════════════
-  function hydrateHeader() {
-    $('#trip-destination').value = trip.destination || '';
-    $('#trip-start').value = trip.startDate || '';
-    $('#trip-end').value = trip.endDate || '';
-  }
-  $('#trip-destination').addEventListener('input', e => { trip.destination = e.target.value; save(); });
-  $('#trip-start').addEventListener('change', e => { trip.startDate = e.target.value; save(); });
-  $('#trip-end').addEventListener('change', e => { trip.endDate = e.target.value; save(); });
 
   // ════════════════════════════════════════════════════════════
   //  탭 전환
@@ -676,7 +674,7 @@
 
   $$('.quick-chip').forEach(chip => chip.addEventListener('click', () => {
     const theme = chip.dataset.q;
-    const dest = trip.destination || '이번 여행지';
+    const dest = tripSummary().destination || '이번 여행지';
     const prompt = `${dest}에서 신혼부부에게 추천하는 ${theme} 몇 곳을 알려줘. 위치와 추천 이유도 간단히.`;
     $('#chat-input').value = prompt;
     $('#chat-input').focus();
@@ -685,13 +683,12 @@
   // ════════════════════════════════════════════════════════════
   //  초기화
   // ════════════════════════════════════════════════════════════
-  hydrateHeader();
   renderItinerary();
   refreshChatKeyState();
   setTab('itinerary');
 
   // 첫 방문 안내
-  if (!trip.days.length && !trip.destination) {
+  if (!trip.days.length) {
     appendChat('ai',
       '안녕하세요! 신혼여행 계획을 도와드릴게요 💕\n\n' +
       '위에 목적지와 날짜를 적고, 🗓 일정표에서 하루하루 일정을 추가해 보세요. ' +

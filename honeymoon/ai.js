@@ -12,9 +12,12 @@ const AI = (() => {
   const MODEL   = 'claude-opus-4-8';   // 대화형 추천에 적합. 필요시 설정에서 변경 가능.
 
   function systemPrompt(trip) {
-    const dest = trip.destination || '(목적지 미정)';
-    const dates = (trip.startDate || trip.endDate)
-      ? `${trip.startDate || '?'} ~ ${trip.endDate || '?'}` : '(일정 미정)';
+    // 별도 입력칸 없이, 일정표에 적힌 DAY 라벨·날짜로 목적지/기간을 유추
+    const days = trip.days || [];
+    const labels = [...new Set(days.map(d => (d.label || '').trim()).filter(Boolean))];
+    const dateList = days.map(d => d.date).filter(Boolean).sort();
+    const dest = labels.length ? labels.join(', ') : '(목적지 미정)';
+    const dates = dateList.length ? `${dateList[0]} ~ ${dateList[dateList.length - 1]}` : '(일정 미정)';
     return [
       '당신은 신혼여행 플래너 전문 AI입니다. 사용자는 신혼여행을 준비하는 부부입니다.',
       `여행 목적지: ${dest}. 여행 기간: ${dates}.`,
