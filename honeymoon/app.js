@@ -227,10 +227,12 @@
     const color = catColor(item.category);
     const el = document.createElement('div');
     const spanning = kind !== 'point';
-    el.className = 'cell-item text-[10px] leading-tight rounded px-1 py-0.5 mb-0.5 border-l-2 hover:opacity-75 ' +
-      (spanning ? 'h-full' : 'truncate');
+    // 넓은 범위 칸(특히 하루 종일인 crossMid)은 옅은 틴트가 큰 면적에서 거의 안 보이니
+    // 진하게 채워서 같은 항목(색)임이 한눈에 보이게 한다.
+    el.className = 'cell-item text-[10px] leading-tight rounded px-1 py-0.5 mb-0.5 hover:opacity-75 ' +
+      (spanning ? 'h-full border-l-4' : 'truncate border-l-2');
     el.style.borderLeftColor = color;
-    el.style.background = color + '1c';
+    el.style.background = color + (spanning ? '40' : '1c');
     el.dataset.item = item.id;
     el.dataset.day = ownerDayId;
     const titleStr = item.title || '(제목 없음)';
