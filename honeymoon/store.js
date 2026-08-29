@@ -75,14 +75,10 @@ const Store = (() => {
       place: '', notes: '2/1 밤 또는 2/2 오전 중 이동 — 항공권 확정되면 날짜·시간을 수정하세요',
     });
     addItem('2027-02-05', {
-      time: '00:30', category: 'transport', title: '✈️ 뉴욕 → 인천 (OZ223)',
+      time: '00:30', endTime: '06:10', endDate: '2027-02-06',
+      category: 'transport', title: '✈️ 뉴욕 → 인천 (OZ223)',
       place: 'John F. Kennedy International Airport', lat: 40.6413, lng: -73.7781,
-      notes: '아시아나항공 OZ223 · A350 · 이코노미(V) · 직항\n도착: 2027-02-06(토) 06:10 서울/인천 (+1일)\n온라인체크인 02/04 00:30, 탑승마감 출발 15분 전',
-    });
-    addItem('2027-02-06', {
-      time: '06:10', category: 'transport', title: '🛬 인천 도착 (OZ223)',
-      place: '인천국제공항', lat: 37.4602, lng: 126.4407,
-      notes: '뉴욕 JFK 2027-02-05 00:30 출발편 도착',
+      notes: '아시아나항공 OZ223 · A350 · 이코노미(V) · 직항\n출발: 2027-02-05(금) 00:30 JFK → 도착: 2027-02-06(토) 06:10 서울/인천\n온라인체크인 02/04 00:30, 탑승마감 출발 15분 전',
     });
 
     return Object.assign(emptyTrip(), { days });

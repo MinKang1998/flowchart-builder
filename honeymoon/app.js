@@ -80,6 +80,11 @@
     if (ei === -1 || ei <= startSlot) return 1;
     return Math.min(ei, SLOT_COUNT) - startSlot;
   }
+  // 종료 날짜가 시작 날짜보다 뒤인, 자정을 넘기는 일정인지 (항공편 등)
+  function crossesDay(item, day) {
+    return !!(day.date && item.endDate && /^\d{4}-\d{2}-\d{2}$/.test(item.endDate) &&
+      item.endDate > day.date && slotIndex(item.endTime) !== -1);
+  }
 
   function renderItinerary() {
     sortTrip();
@@ -92,6 +97,8 @@
     // DAY별 30분 슬롯에 항목 배치, 시간 미정 항목은 별도 버킷
     // 종료 시간이 있는 항목(예: 항공편)은 시작 슬롯에 { item, span }으로 담아
     // 이어지는 여러 슬롯을 rowspan 하나의 칸으로 합쳐서 그린다.
+    // 종료 날짜가 다음날 이후(자정을 넘김)이면 출발일엔 "그날 끝까지" 칸을,
+    // 도착일엔 "00:00부터 도착 시간까지" 칸을 각각 만들어 두 날짜에 걸쳐 이어 보이게 한다.
     const byDay = trip.days.map(day => {
       const slots = Array.from({ length: SLOT_COUNT }, () => []);
       const consumed = new Array(SLOT_COUNT).fill(false); // 앞선 rowspan에 이미 덮인 슬롯
@@ -99,9 +106,25 @@
       day.items.forEach(item => {
         const si = slotIndex(item.time);
         if (si === -1) { unscheduled.push(item); return; }
-        slots[si].push({ item, span: itemSpan(item, si) });
+        if (crossesDay(item, day)) {
+          slots[si].push({ item, span: SLOT_COUNT - si, kind: 'crossStart', ownerDayId: day.id });
+        } else {
+          const span = itemSpan(item, si);
+          slots[si].push({ item, span, kind: span > 1 ? 'range' : 'point', ownerDayId: day.id });
+        }
       });
       return { day, slots, consumed, unscheduled };
+    });
+
+    // 자정을 넘기는 항목의 "도착일" 칸을 대상 DAY의 00:00 슬롯에 추가
+    byDay.forEach(({ day }) => {
+      day.items.forEach(item => {
+        if (!crossesDay(item, day)) return;
+        const target = byDay.find(b => b.day.date === item.endDate);
+        if (!target) return; // 도착 날짜가 일정표 범위 밖이면 출발 쪽 칸만 표시
+        const ei = slotIndex(item.endTime);
+        target.slots[0].push({ item, span: Math.max(1, ei), kind: 'crossEnd', ownerDayId: day.id });
+      });
     });
 
     const table = document.createElement('table');
@@ -148,7 +171,7 @@
     byDay.forEach(({ day, unscheduled }) => {
       const td = document.createElement('td');
       td.className = 'border border-slate-100 bg-amber-50/40 align-top p-0.5 cursor-pointer hover:bg-amber-50';
-      unscheduled.forEach(item => td.appendChild(renderCellItem(day, item)));
+      unscheduled.forEach(item => td.appendChild(renderCellItem(day.id, item, 'point')));
       td.addEventListener('click', e => {
         if (e.target.closest('.cell-item')) return;
         openItemModal(day.id, null, { time: '' });
@@ -172,7 +195,7 @@
         const td = document.createElement('td');
         if (rowspan > 1) td.rowSpan = rowspan;
         td.className = `border border-slate-100 align-top p-0.5 cursor-pointer hover:bg-rose-50/50 min-h-[24px] ${onHour ? 'border-t-slate-300' : ''}`;
-        entries.forEach(({ item, span }) => td.appendChild(renderCellItem(day, item, span > 1)));
+        entries.forEach(({ item, kind, ownerDayId }) => td.appendChild(renderCellItem(ownerDayId, item, kind)));
         td.addEventListener('click', e => {
           if (e.target.closest('.cell-item')) return;
           openItemModal(day.id, null, { time: slotLabel(s) });
@@ -190,30 +213,40 @@
     wrap.appendChild(scrollWrap);
   }
 
-  function renderCellItem(day, item, spanning) {
+  // kind: 'point'(단일 시점) | 'range'(같은 날 시작~종료) |
+  //       'crossStart'(자정 넘겨 다음날로 이어짐) | 'crossEnd'(전날에서 넘어옴)
+  function renderCellItem(ownerDayId, item, kind) {
     const c = CAT[item.category] || CAT.etc;
     const color = catColor(item.category);
     const el = document.createElement('div');
+    const spanning = kind !== 'point';
     el.className = 'cell-item text-[10px] leading-tight rounded px-1 py-0.5 mb-0.5 border-l-2 hover:opacity-75 ' +
       (spanning ? 'h-full' : 'truncate');
     el.style.borderLeftColor = color;
     el.style.background = color + '1c';
     el.dataset.item = item.id;
-    el.dataset.day = day.id;
+    el.dataset.day = ownerDayId;
     const titleStr = item.title || '(제목 없음)';
     const startsWithEmoji = /^\p{Extended_Pictographic}/u.test(titleStr);
     const label = (startsWithEmoji ? '' : c.emoji + ' ') + titleStr;
-    if (spanning) {
+    const rangeText = `${item.time || ''}–${item.endTime || ''}`;
+    if (kind === 'range') {
       el.innerHTML = `<div class="font-semibold">${esc(label)}</div>` +
         `<div class="text-slate-500">${esc(item.time)} – ${esc(item.endTime)}</div>`;
+    } else if (kind === 'crossStart') {
+      el.innerHTML = `<div class="font-semibold">${esc(label)}</div>` +
+        `<div class="text-slate-500">${esc(item.time)} → 익일 ${esc(item.endTime)}</div>`;
+    } else if (kind === 'crossEnd') {
+      el.innerHTML = `<div class="text-slate-400 text-[9px]">전날 ${esc(item.time)} 출발 →</div>` +
+        `<div class="font-semibold">${esc(label)}</div>` +
+        `<div class="text-slate-500">~ ${esc(item.endTime)} 도착</div>`;
     } else {
       el.textContent = label;
     }
-    el.title = titleStr + (item.place ? ` · ${item.place}` : '') +
-      (spanning ? ` · ${item.time}–${item.endTime}` : '');
+    el.title = titleStr + (item.place ? ` · ${item.place}` : '') + (spanning ? ` · ${rangeText}` : '');
     el.addEventListener('click', e => {
       e.stopPropagation();
-      openItemModal(day.id, item.id);
+      openItemModal(ownerDayId, item.id);
     });
     return el;
   }
@@ -352,11 +385,17 @@
 
     const time = normTime(en.time);
     const endTimeRaw = normTime(en.endTime);
+    const endDateRaw = normDate(en.endDate);
+    let endTime = '', endDate = '';
+    if (endTimeRaw && time) {
+      if (endDateRaw && date && endDateRaw > date) { endTime = endTimeRaw; endDate = endDateRaw; }
+      else if (endTimeRaw > time) { endTime = endTimeRaw; }
+    }
     const item = {
       id: Store.uid(),
       category,
       time,
-      endTime: (endTimeRaw && time && endTimeRaw > time) ? endTimeRaw : '',
+      endTime, endDate,
       title: (en.title || '').trim() || '(예약)',
       place: (en.place || en.city || '').trim(),
       notes: fullNotes,
@@ -423,6 +462,7 @@
     $('#item-modal-title').textContent = item ? '일정 편집' : '일정 추가';
     $('#item-time').value = item ? (item.time || '') : (prefill.time ?? '');
     $('#item-end-time').value = item ? (item.endTime || '') : (prefill.endTime ?? '');
+    $('#item-end-date').value = item ? (item.endDate || '') : (prefill.endDate ?? '');
     $('#item-category').value = item?.category || 'sight';
     $('#item-title').value = item?.title || '';
     $('#item-notes').value = item?.notes || '';
@@ -569,8 +609,18 @@
     }
     item.time = $('#item-time').value;
     const endTime = $('#item-end-time').value;
-    // 종료 시간은 시작 시간보다 뒤일 때만 범위로 인정 (아니면 무시)
-    item.endTime = (endTime && item.time && endTime > item.time) ? endTime : '';
+    const endDateInput = $('#item-end-date').value;
+    if (!endTime) {
+      item.endTime = ''; item.endDate = '';
+    } else if (endDateInput && day.date && endDateInput !== day.date) {
+      // 자정을 넘기는 범위: 종료 날짜가 시작 날짜보다 뒤일 때만 인정
+      if (endDateInput > day.date) { item.endTime = endTime; item.endDate = endDateInput; }
+      else { item.endTime = ''; item.endDate = ''; }
+    } else {
+      // 같은 날짜 범위: 종료 시간이 시작 시간보다 뒤일 때만 인정
+      item.endTime = (item.time && endTime > item.time) ? endTime : '';
+      item.endDate = '';
+    }
     item.category = $('#item-category').value;
     item.title = title;
     item.notes = $('#item-notes').value.trim();
