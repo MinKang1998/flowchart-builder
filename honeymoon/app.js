@@ -116,14 +116,20 @@
       return { day, slots, consumed, unscheduled };
     });
 
-    // 자정을 넘기는 항목의 "도착일" 칸을 대상 DAY의 00:00 슬롯에 추가
+    // 자정을 넘기는 항목의 "도착일" 칸을 대상 DAY의 00:00 슬롯에 추가.
+    // 출발일과 도착일 사이에 낀 날짜(예: 경유가 긴 이동)가 있으면
+    // 그 날짜들도 하루 종일 이어진 칸으로 표시해 "같은 이동"임을 보여준다.
     byDay.forEach(({ day }) => {
       day.items.forEach(item => {
         if (!crossesDay(item, day)) return;
-        const target = byDay.find(b => b.day.date === item.endDate);
-        if (!target) return; // 도착 날짜가 일정표 범위 밖이면 출발 쪽 칸만 표시
         const ei = slotIndex(item.endTime);
-        target.slots[0].push({ item, span: Math.max(1, ei), kind: 'crossEnd', ownerDayId: day.id });
+        byDay.forEach(other => {
+          if (other.day.date === item.endDate) {
+            other.slots[0].push({ item, span: Math.max(1, ei), kind: 'crossEnd', ownerDayId: day.id });
+          } else if (other.day.date > day.date && other.day.date < item.endDate) {
+            other.slots[0].push({ item, span: SLOT_COUNT, kind: 'crossMid', ownerDayId: day.id });
+          }
+        });
       });
     });
 
@@ -214,7 +220,8 @@
   }
 
   // kind: 'point'(단일 시점) | 'range'(같은 날 시작~종료) |
-  //       'crossStart'(자정 넘겨 다음날로 이어짐) | 'crossEnd'(전날에서 넘어옴)
+  //       'crossStart'(자정 넘겨 다음날로 이어짐) | 'crossEnd'(전날에서 넘어옴) |
+  //       'crossMid'(출발일·도착일 사이에 낀 날짜 — 하루 종일 이동 중)
   function renderCellItem(ownerDayId, item, kind) {
     const c = CAT[item.category] || CAT.etc;
     const color = catColor(item.category);
@@ -240,6 +247,9 @@
       el.innerHTML = `<div class="text-slate-400 text-[9px]">전날 ${esc(item.time)} 출발 →</div>` +
         `<div class="font-semibold">${esc(label)}</div>` +
         `<div class="text-slate-500">~ ${esc(item.endTime)} 도착</div>`;
+    } else if (kind === 'crossMid') {
+      el.innerHTML = `<div class="text-slate-400 text-[9px]">← 이동 중 →</div>` +
+        `<div class="font-semibold">${esc(label)}</div>`;
     } else {
       el.textContent = label;
     }
@@ -460,6 +470,7 @@
     const item = itemId ? day.items.find(i => i.id === itemId) : null;
 
     $('#item-modal-title').textContent = item ? '일정 편집' : '일정 추가';
+    $('#item-start-date').value = day?.date || '';
     $('#item-time').value = item ? (item.time || '') : (prefill.time ?? '');
     $('#item-end-time').value = item ? (item.endTime || '') : (prefill.endTime ?? '');
     $('#item-end-date').value = item ? (item.endDate || '') : (prefill.endDate ?? '');
@@ -598,7 +609,7 @@
   function commitItem({ silent } = {}) {
     const title = $('#item-title').value.trim();
     if (!title && !silent) { $('#item-title').focus(); return null; }
-    const day = trip.days.find(d => d.id === editing.dayId);
+    let day = trip.days.find(d => d.id === editing.dayId);
     if (!day) return null;
 
     let item = editing.itemId ? day.items.find(i => i.id === editing.itemId) : null;
@@ -607,6 +618,21 @@
       day.items.push(item);
       editing.itemId = item.id;
     }
+
+    // 시작 날짜를 바꾸면 그 날짜의 DAY로 항목을 옮김 (없으면 새로 만듦)
+    const startDateInput = $('#item-start-date').value;
+    if (startDateInput && startDateInput !== day.date) {
+      day.items = day.items.filter(i => i.id !== item.id);
+      let target = trip.days.find(d => d.date === startDateInput);
+      if (!target) {
+        target = { id: Store.uid(), date: startDateInput, label: '', items: [] };
+        trip.days.push(target);
+      }
+      target.items.push(item);
+      day = target;
+      editing.dayId = day.id;
+    }
+
     item.time = $('#item-time').value;
     const endTime = $('#item-end-time').value;
     const endDateInput = $('#item-end-date').value;
