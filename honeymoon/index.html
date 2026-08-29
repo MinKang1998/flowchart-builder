@@ -7,13 +7,13 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
         integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
-  <link rel="stylesheet" href="style.css?v=5"/>
+  <link rel="stylesheet" href="style.css?v=6"/>
 </head>
 <body class="bg-rose-50 min-h-screen text-slate-800">
 
 <!-- ── 상단 네비 ────────────────────────────────────────────── -->
 <nav class="border-b border-rose-100 bg-white/90 backdrop-blur sticky top-0 z-[1000]">
-  <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
+  <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
     <div class="flex items-center gap-2">
       <span class="text-xl">💍</span>
       <span class="font-bold text-rose-600 tracking-tight">허니문 플래너</span>
@@ -27,24 +27,23 @@
 </nav>
 
 <!-- ── 탭 ───────────────────────────────────────────────────── -->
-<div class="max-w-5xl mx-auto px-4 mt-5 pt-5">
+<div class="max-w-6xl mx-auto px-4 mt-5 pt-5">
   <div class="flex gap-1 bg-white rounded-xl p-1 border border-rose-100 shadow-sm">
     <button data-tab="itinerary" class="tab-btn flex-1 text-sm font-semibold py-2 rounded-lg transition">🗓 일정표</button>
     <button data-tab="map"       class="tab-btn flex-1 text-sm font-semibold py-2 rounded-lg transition">🗺 동선 지도</button>
-    <button data-tab="ai"        class="tab-btn flex-1 text-sm font-semibold py-2 rounded-lg transition">✨ AI 추천</button>
   </div>
 </div>
 
-<main class="max-w-5xl mx-auto px-4 py-5">
+<main class="max-w-6xl mx-auto px-4 py-5">
 
-  <!-- ── 일정표 탭 ──────────────────────────────────────────── -->
+  <!-- ── 일정표 탭 (홈) ─────────────────────────────────────── -->
   <section id="panel-itinerary" class="tab-panel">
     <div class="flex items-center justify-between mb-3 gap-2 flex-wrap">
       <h2 class="text-sm font-bold text-slate-700">🗓 일정표</h2>
       <div class="flex gap-2">
         <button id="btn-add-flight"
           class="text-xs px-3 py-1.5 rounded-lg bg-sky-500 hover:bg-sky-600 text-white font-semibold transition">
-          📄 예약·바우처 자동입력
+          📄 예약·바우처 자동입력 (AI 인식)
         </button>
         <input id="flight-file-input" type="file" accept="image/*,application/pdf" multiple class="hidden"/>
         <button id="btn-add-day"
@@ -62,13 +61,14 @@
       📎 <b class="text-sky-600">항공권 · 예약확인서 · 바우처</b>(사진/PDF)를 여기에 끌어다 놓거나 클릭하면<br class="hidden sm:block"/>
       AI가 항공편·숙소·맛집·투어 일정으로 자동 정리해 줘요. <span class="text-slate-400">(여러 개 한꺼번에 가능)</span>
     </div>
-    <div id="days-container" class="space-y-4"></div>
+    <!-- 시간표 형식 일정표: 하나의 연속 패널에 DAY별 구간이 이어짐 -->
+    <div id="days-container" class="bg-white rounded-2xl border border-rose-100 shadow-sm overflow-hidden"></div>
     <div id="itinerary-empty" class="hidden text-center text-slate-400 text-sm py-16">
       아직 일정이 없어요. <b>+ 날짜 추가</b>로 첫 날을 만들어 보세요.
     </div>
   </section>
 
-  <!-- ── 지도 탭 ────────────────────────────────────────────── -->
+  <!-- ── 지도 탭 (2번째 메뉴탭) ─────────────────────────────── -->
   <section id="panel-map" class="tab-panel hidden">
     <div class="flex flex-wrap items-center gap-2 mb-3">
       <h2 class="text-sm font-bold text-slate-700 mr-auto">🗺 동선 지도</h2>
@@ -83,36 +83,44 @@
       위치가 지정된 일정만 지도에 표시됩니다.
     </p>
   </section>
-
-  <!-- ── AI 추천 탭 ─────────────────────────────────────────── -->
-  <section id="panel-ai" class="tab-panel hidden">
-    <div class="bg-white rounded-2xl border border-rose-100 shadow-sm flex flex-col" style="height:72vh;min-height:460px;">
-      <div class="px-4 py-3 border-b border-rose-100 flex items-center gap-2 flex-wrap">
-        <span class="text-sm font-bold text-slate-700">✨ AI 여행 추천 챗봇</span>
-        <div class="ml-auto flex gap-1">
-          <button class="quick-chip" data-q="맛집">🍜 맛집</button>
-          <button class="quick-chip" data-q="명소">📸 명소</button>
-          <button class="quick-chip" data-q="쇼핑">🛍 쇼핑</button>
-        </div>
-      </div>
-      <div id="chat-log" class="flex-1 overflow-y-auto px-4 py-4 space-y-3 text-sm"></div>
-      <div class="px-3 py-3 border-t border-rose-100">
-        <div id="chat-nokey" class="hidden text-[11px] text-amber-600 mb-2">
-          ⚠️ AI 추천을 쓰려면 <b>설정 ⚙️</b>에서 Claude API 키를 먼저 입력하세요.
-        </div>
-        <form id="chat-form" class="flex gap-2">
-          <input id="chat-input" type="text" autocomplete="off"
-            placeholder="예: 로마에서 커플이 가기 좋은 야경 명소 추천해줘"
-            class="flex-1 text-sm px-3 py-2.5 rounded-xl border border-slate-200 focus:border-rose-400 focus:ring-1 focus:ring-rose-200 outline-none"/>
-          <button type="submit" id="chat-send"
-            class="px-4 py-2.5 rounded-xl bg-rose-500 hover:bg-rose-600 text-white text-sm font-semibold transition">
-            보내기
-          </button>
-        </form>
-      </div>
-    </div>
-  </section>
 </main>
+
+<!-- ── AI 추천 플로팅 버튼 ──────────────────────────────────── -->
+<button id="btn-open-ai"
+  class="fixed bottom-5 right-5 z-[900] w-14 h-14 rounded-full bg-rose-500 hover:bg-rose-600 text-white shadow-lg flex items-center justify-center text-2xl transition"
+  title="AI 여행 추천">
+  ✨
+</button>
+
+<!-- ── AI 추천 모달 ─────────────────────────────────────────── -->
+<div id="ai-modal" class="hidden fixed inset-0 z-[2000] bg-black/40 flex items-end sm:items-center justify-center p-0 sm:p-4">
+  <div class="bg-white sm:rounded-2xl shadow-xl w-full sm:max-w-lg flex flex-col" style="height:85vh; max-height:640px;">
+    <div class="px-4 py-3 border-b border-rose-100 flex items-center gap-2 flex-wrap">
+      <span class="text-sm font-bold text-slate-700">✨ AI 여행 추천 챗봇</span>
+      <div class="ml-auto flex gap-1">
+        <button class="quick-chip" data-q="맛집">🍜 맛집</button>
+        <button class="quick-chip" data-q="명소">📸 명소</button>
+        <button class="quick-chip" data-q="쇼핑">🛍 쇼핑</button>
+      </div>
+      <button id="ai-modal-close" class="text-slate-400 hover:text-slate-600 text-xl leading-none ml-1">&times;</button>
+    </div>
+    <div id="chat-log" class="flex-1 overflow-y-auto px-4 py-4 space-y-3 text-sm"></div>
+    <div class="px-3 py-3 border-t border-rose-100">
+      <div id="chat-nokey" class="hidden text-[11px] text-amber-600 mb-2">
+        ⚠️ AI 추천을 쓰려면 <b>설정 ⚙️</b>에서 Claude API 키를 먼저 입력하세요.
+      </div>
+      <form id="chat-form" class="flex gap-2">
+        <input id="chat-input" type="text" autocomplete="off"
+          placeholder="예: 칸쿤에서 커플이 가기 좋은 해변 추천해줘"
+          class="flex-1 text-sm px-3 py-2.5 rounded-xl border border-slate-200 focus:border-rose-400 focus:ring-1 focus:ring-rose-200 outline-none"/>
+        <button type="submit" id="chat-send"
+          class="px-4 py-2.5 rounded-xl bg-rose-500 hover:bg-rose-600 text-white text-sm font-semibold transition">
+          보내기
+        </button>
+      </form>
+    </div>
+  </div>
+</div>
 
 <!-- ── 설정 모달 ────────────────────────────────────────────── -->
 <div id="settings-modal" class="hidden fixed inset-0 z-[2000] bg-black/40 flex items-center justify-center p-4">
@@ -149,6 +157,13 @@
       🔒 입력한 키는 소스코드나 서버가 아닌 <b>이 브라우저(localStorage)</b>에만 남습니다.
       공용 기기에서는 사용 후 <b>키 삭제</b>를 눌러 지워주세요.
     </p>
+    <div class="mt-4 pt-4 border-t border-slate-100">
+      <button id="settings-reset-trip" type="button"
+        class="w-full py-2 rounded-lg bg-red-50 hover:bg-red-100 text-red-500 text-xs font-medium transition">
+        🗑 일정 전체 초기화
+      </button>
+      <p class="text-[10px] text-slate-400 mt-1">모든 DAY·일정·첨부파일을 삭제하고 빈 상태로 되돌립니다. 되돌릴 수 없어요.</p>
+    </div>
   </div>
 </div>
 
@@ -232,9 +247,9 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
         integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
-<script src="store.js?v=5"></script>
-<script src="map.js?v=5"></script>
-<script src="ai.js?v=5"></script>
-<script src="app.js?v=5"></script>
+<script src="store.js?v=6"></script>
+<script src="map.js?v=6"></script>
+<script src="ai.js?v=6"></script>
+<script src="app.js?v=6"></script>
 </body>
 </html>

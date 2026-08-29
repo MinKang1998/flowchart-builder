@@ -42,7 +42,6 @@
     $$('.tab-panel').forEach(p => p.classList.add('hidden'));
     $('#panel-' + name).classList.remove('hidden');
     if (name === 'map') { renderMap(); }
-    if (name === 'ai')  { refreshChatKeyState(); }
   }
   $$('.tab-btn').forEach(b => b.addEventListener('click', () => setTab(b.dataset.tab)));
 
@@ -62,6 +61,8 @@
   // ════════════════════════════════════════════════════════════
   //  일정표 렌더링
   // ════════════════════════════════════════════════════════════
+  const WEEKDAY = ['일', '월', '화', '수', '목', '금', '토'];
+
   function renderItinerary() {
     sortTrip();
     save();
@@ -70,27 +71,38 @@
     $('#itinerary-empty').classList.toggle('hidden', trip.days.length > 0);
 
     trip.days.forEach((day, di) => {
-      const card = document.createElement('div');
-      card.className = 'bg-white rounded-2xl border border-rose-100 shadow-sm overflow-hidden';
-      card.innerHTML = `
-        <div class="flex items-center gap-2 px-4 py-3 bg-rose-50/60 border-b border-rose-100">
-          <span class="text-sm font-bold text-rose-600">DAY ${di + 1}</span>
+      const group = document.createElement('div');
+      group.className = 'day-group border-b border-rose-100 last:border-b-0';
+
+      let dateBig = '', dow = '';
+      if (/^\d{4}-\d{2}-\d{2}$/.test(day.date)) {
+        const [y, m, d] = day.date.split('-').map(Number);
+        dateBig = `${m}/${d}`;
+        dow = WEEKDAY[new Date(y, m - 1, d).getDay()];
+      }
+
+      group.innerHTML = `
+        <div class="flex items-center gap-2 px-4 py-2.5 bg-rose-50/70 border-b border-rose-100">
+          <span class="text-[11px] font-bold text-rose-400 shrink-0">DAY ${di + 1}</span>
+          <span class="text-base font-extrabold text-slate-800 shrink-0 tabular-nums">
+            ${esc(dateBig)}${dow ? `<span class="text-xs font-medium text-slate-400 ml-0.5">(${dow})</span>` : ''}
+          </span>
           <input type="date" value="${esc(day.date || '')}" data-day="${day.id}"
-            class="day-date text-xs px-2 py-1 rounded border border-slate-200 bg-white outline-none"/>
-          <input type="text" value="${esc(day.label || '')}" placeholder="예: 로마 시내"
+            class="day-date text-[11px] px-1.5 py-1 rounded border border-slate-200 bg-white outline-none w-[128px] shrink-0"/>
+          <input type="text" value="${esc(day.label || '')}" placeholder="도시"
             data-day="${day.id}"
-            class="day-label flex-1 text-sm px-2 py-1 rounded border border-transparent hover:border-slate-200 focus:border-rose-300 outline-none font-medium"/>
-          <button class="day-del text-slate-300 hover:text-red-500 text-lg leading-none px-1" data-day="${day.id}" title="날짜 삭제">&times;</button>
+            class="day-label flex-1 min-w-0 text-sm px-2 py-1 rounded border border-transparent hover:border-slate-200 focus:border-rose-300 outline-none font-semibold text-slate-600"/>
+          <button class="day-del text-slate-300 hover:text-red-500 text-lg leading-none px-1 shrink-0" data-day="${day.id}" title="날짜 삭제">&times;</button>
         </div>
         <div class="items-list divide-y divide-slate-100" data-day="${day.id}"></div>
-        <button class="add-item w-full text-xs text-rose-500 hover:bg-rose-50 py-2.5 font-medium transition" data-day="${day.id}">
+        <button class="add-item w-full text-left text-xs text-rose-500 hover:bg-rose-50 py-2 px-4 font-medium transition" data-day="${day.id}">
           + 일정 추가
         </button>`;
-      wrap.appendChild(card);
+      wrap.appendChild(group);
 
-      const list = $('.items-list', card);
+      const list = $('.items-list', group);
       if (!day.items.length) {
-        list.innerHTML = `<div class="px-4 py-4 text-xs text-slate-300 text-center">일정을 추가해 보세요</div>`;
+        list.innerHTML = `<div class="px-4 py-3 text-xs text-slate-300">일정을 추가해 보세요</div>`;
       }
       day.items.forEach(item => list.appendChild(renderItemRow(day, item)));
 
@@ -107,7 +119,8 @@
   function renderItemRow(day, item) {
     const c = CAT[item.category] || CAT.etc;
     const row = document.createElement('div');
-    row.className = 'item-row flex items-center gap-2 px-3 py-2.5 hover:bg-slate-50 cursor-pointer';
+    row.className = 'item-row flex items-stretch gap-2 pl-2.5 pr-3 py-2.5 hover:bg-slate-50 cursor-pointer border-l-4';
+    row.style.borderLeftColor = catColor(item.category);
     row.dataset.item = item.id;
     row.dataset.day = day.id;
     const hasLoc = typeof item.lat === 'number';
@@ -117,15 +130,16 @@
     const startsWithEmoji = /^\p{Extended_Pictographic}/u.test(titleStr);
     const emojiPrefix = startsWithEmoji ? '' : c.emoji + ' ';
     row.innerHTML = `
-      <span class="drag-handle cursor-grab text-slate-300 hover:text-slate-500 select-none px-1" title="드래그로 순서변경">⠿</span>
-      <span class="text-xs text-slate-400 w-11 tabular-nums">${esc(item.time || '––:––')}</span>
-      <span class="w-2 h-2 rounded-full shrink-0" style="background:${catColor(item.category)}"></span>
-      <span class="flex-1 min-w-0">
-        <span class="text-sm text-slate-700 truncate block">${emojiPrefix}${esc(titleStr)}</span>
-        ${item.place ? `<span class="text-[11px] text-slate-400 truncate block">📍 ${esc(item.place)}</span>` : ''}
+      <span class="drag-handle cursor-grab text-slate-300 hover:text-slate-500 select-none flex items-center px-0.5" title="드래그로 순서변경">⠿</span>
+      <span class="font-mono text-sm font-bold text-slate-500 w-12 flex items-center shrink-0 tabular-nums">${esc(item.time || '--:--')}</span>
+      <span class="flex-1 min-w-0 flex flex-col justify-center py-0.5">
+        <span class="text-sm text-slate-800 truncate">${emojiPrefix}${esc(titleStr)}</span>
+        ${item.place ? `<span class="text-[11px] text-slate-400 truncate">📍 ${esc(item.place)}</span>` : ''}
       </span>
-      ${hasLoc ? '<span class="text-[10px] text-emerald-500" title="지도 표시됨">지도</span>' : ''}
-      ${attCount ? `<span class="text-[10px] text-slate-400">📎${attCount}</span>` : ''}`;
+      <span class="flex items-center gap-1.5 shrink-0">
+        ${hasLoc ? '<span class="text-[10px] text-emerald-500" title="지도 표시됨">지도</span>' : ''}
+        ${attCount ? `<span class="text-[10px] text-slate-400">📎${attCount}</span>` : ''}
+      </span>`;
     row.addEventListener('click', e => {
       if (e.target.closest('.drag-handle')) return;
       openItemModal(day.id, item.id);
@@ -606,6 +620,32 @@
     refreshChatKeyState();
     alert('저장된 API 키를 이 브라우저에서 삭제했습니다.');
   });
+  $('#settings-reset-trip').addEventListener('click', async () => {
+    if (!confirm('정말 모든 일정을 삭제할까요? 되돌릴 수 없어요.')) return;
+    for (const day of trip.days) {
+      for (const item of day.items) {
+        const atts = await Store.listAttachments(item.id);
+        for (const a of atts) await Store.deleteAttachment(a.id);
+      }
+    }
+    trip = Store.emptyTrip();
+    save();
+    renderItinerary();
+    $('#settings-modal').classList.add('hidden');
+    alert('일정을 초기화했어요.');
+  });
+
+  // ════════════════════════════════════════════════════════════
+  //  AI 추천 모달 (탭이 아닌 플로팅 버튼으로 열림)
+  // ════════════════════════════════════════════════════════════
+  function openAiModal() {
+    refreshChatKeyState();
+    $('#ai-modal').classList.remove('hidden');
+    setTimeout(() => $('#chat-input').focus(), 50);
+  }
+  function closeAiModal() { $('#ai-modal').classList.add('hidden'); }
+  $('#btn-open-ai').addEventListener('click', openAiModal);
+  $('#ai-modal-close').addEventListener('click', closeAiModal);
 
   // ════════════════════════════════════════════════════════════
   //  AI 챗봇
@@ -687,12 +727,13 @@
   refreshChatKeyState();
   setTab('itinerary');
 
-  // 첫 방문 안내
+  // 첫 방문 안내 (일정이 비어있을 때 — 보통 초기화 직후)
   if (!trip.days.length) {
     appendChat('ai',
       '안녕하세요! 신혼여행 계획을 도와드릴게요 💕\n\n' +
-      '위에 목적지와 날짜를 적고, 🗓 일정표에서 하루하루 일정을 추가해 보세요. ' +
-      '각 일정에 위치를 지정하면 🗺 지도에서 동선이 그려지고, 바우처·사진·PDF도 첨부할 수 있어요.\n\n' +
-      'AI 추천을 쓰려면 ⚙️ 설정에서 Claude API 키를 입력해 주세요.');
+      '🗓 일정표에서 + 날짜(DAY) 추가로 하루하루 일정을 만들어 보세요. ' +
+      '📄 예약·바우처 자동입력 버튼(또는 드래그앤드롭)으로 항공권·숙소 예약서를 올리면 AI가 자동으로 일정을 채워줘요.\n\n' +
+      '각 일정에 위치를 지정하면 🗺 동선 지도 탭에서 순서대로 표시되고, 바우처·사진·PDF도 첨부할 수 있어요.\n\n' +
+      '이 버튼(✨)을 누르면 언제든 AI 추천을 받을 수 있어요. 쓰려면 ⚙️ 설정에서 Claude API 키를 입력해 주세요.');
   }
 })();
