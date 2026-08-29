@@ -30,7 +30,7 @@ const Store = (() => {
 
   // ── 기본 시드 일정 (저장된 데이터가 전혀 없을 때만 채워짐) ──────
   //   1/23 출국 준비 → 1/24 LA 도착 → 라스베가스·그랜드캐니언 →
-  //   칸쿤 → 뉴욕 → 2/5 인천 도착 → 2/8까지 여유일
+  //   칸쿤 → 뉴욕 → 2/5 00:30 OZ223 출발 → 2/6 06:10 인천 도착 → 2/8까지 여유일
   //   연도는 명시되지 않아 다음 1/23(2027년) 기준으로 채움 — DAY의
   //   날짜 입력칸에서 언제든 수정 가능.
   function seedTrip() {
@@ -49,7 +49,7 @@ const Store = (() => {
       mk('2027-02-02', '뉴욕'),
       mk('2027-02-03', '뉴욕'),
       mk('2027-02-04', '뉴욕'),
-      mk('2027-02-05', '인천'),
+      mk('2027-02-05', '이동(뉴욕→인천)'),
       mk('2027-02-06', '인천'),
       mk('2027-02-07', '인천'),
       mk('2027-02-08', '인천'),
@@ -74,13 +74,15 @@ const Store = (() => {
       time: '20:00', category: 'transport', title: '🚕 뉴욕으로 이동',
       place: '', notes: '2/1 밤 또는 2/2 오전 중 이동 — 항공권 확정되면 날짜·시간을 수정하세요',
     });
-    addItem('2027-02-04', {
-      time: '12:00', category: 'transport', title: '✈️ 뉴욕 → 인천',
-      place: 'John F. Kennedy International Airport', lat: 40.6413, lng: -73.7781, notes: '',
-    });
     addItem('2027-02-05', {
-      time: '17:45', category: 'transport', title: '🛬 인천 도착',
-      place: '인천국제공항', lat: 37.4602, lng: 126.4407, notes: '',
+      time: '00:30', category: 'transport', title: '✈️ 뉴욕 → 인천 (OZ223)',
+      place: 'John F. Kennedy International Airport', lat: 40.6413, lng: -73.7781,
+      notes: '아시아나항공 OZ223 · A350 · 이코노미(V) · 직항\n도착: 2027-02-06(토) 06:10 서울/인천 (+1일)\n온라인체크인 02/04 00:30, 탑승마감 출발 15분 전',
+    });
+    addItem('2027-02-06', {
+      time: '06:10', category: 'transport', title: '🛬 인천 도착 (OZ223)',
+      place: '인천국제공항', lat: 37.4602, lng: 126.4407,
+      notes: '뉴욕 JFK 2027-02-05 00:30 출발편 도착',
     });
 
     return Object.assign(emptyTrip(), { days });
